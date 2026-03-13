@@ -63,13 +63,40 @@ app.use('/api/', limiter);
 // Mount API routes
 app.use('/api', routes);
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+    const { isConfigured: awsConfigured } = require('./config/aws');
+    
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development',
+        version: '1.0.0',
+        services: {
+            database: {
+                configured: db.isConfigured || false,
+                status: db.isConfigured ? 'available' : 'not configured'
+            },
+            aws: {
+                configured: awsConfigured || false,
+                status: awsConfigured ? 'available' : 'not configured'
+            },
+            smtp: {
+                configured: !!(process.env.SMTP_HOST && process.env.SMTP_USER),
+                status: (process.env.SMTP_HOST && process.env.SMTP_USER) ? 'available' : 'not configured'
+            }
+        },
+        message: db.isConfigured && awsConfigured ? 'All systems operational' : 'Running with limited functionality - check services configuration'
+    });
+});
+
 // Root route
 app.get('/', (req, res) => {
     res.json({
         success: true,
         message: 'Fotow API',
         version: '1.0.0',
-        documentation: '/api/health'
+        healthCheck: '/health'
     });
 });
 
