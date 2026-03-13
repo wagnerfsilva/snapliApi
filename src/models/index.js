@@ -9,7 +9,9 @@ const config = require(__dirname + '/../config/database.js')[env];
 const db = {};
 
 // Check if database credentials are configured
-const hasDbCredentials = !!(config.host && config.username && config.password && config.database);
+const hasDbCredentials = !!(config.use_env_variable
+    ? process.env[config.use_env_variable]
+    : (config.host && config.username && config.password && config.database));
 
 if (!hasDbCredentials) {
     console.warn('⚠️  WARNING: Database credentials not configured. Application will start but database features will not work.');
