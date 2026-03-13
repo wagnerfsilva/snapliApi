@@ -24,11 +24,26 @@ class EmailService {
             };
         }
 
-        // Production mode - use real SMTP
+        // Production mode - check if SMTP is configured
+        if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+            logger.warn('SMTP not configured, emails will be logged only');
+            return {
+                sendMail: async (options) => {
+                    logger.info('📧 Email (NO SMTP - PRODUCTION):', {
+                        to: options.to,
+                        subject: options.subject,
+                        text: options.text?.substring(0, 200)
+                    });
+                    return { messageId: 'no-smtp-' + Date.now() };
+                }
+            };
+        }
+
+        // Production mode with SMTP configured - use real SMTP
         return nodemailer.createTransporter({
-            host: process.env.SMTP_HOST || 'smtp.gmail.com',
-            port: process.env.SMTP_PORT || 587,
-            secure: false,
+            host: process.env.SMTP_HOST,
+            port: parseInt(process.env.SMTP_PORT) || 587,
+            secure: process.env.SMTP_SECURE === 'true',
             auth: {
                 user: process.env.SMTP_USER,
                 pass: process.env.SMTP_PASS
