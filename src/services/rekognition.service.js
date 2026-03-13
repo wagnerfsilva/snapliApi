@@ -6,14 +6,28 @@ const {
     DetectFacesCommand,
     DeleteFacesCommand
 } = require('@aws-sdk/client-rekognition');
-const { rekognitionClient, rekognition } = require('../config/aws');
+const { rekognitionClient, rekognition, isConfigured } = require('../config/aws');
 const logger = require('../utils/logger');
 
 class RekognitionService {
+    constructor() {
+        if (!isConfigured || !rekognitionClient) {
+            logger.warn('RekognitionService initialized but AWS is not configured');
+        }
+    }
+
+    _checkAwsConfigured() {
+        if (!isConfigured || !rekognitionClient) {
+            throw new Error('AWS Rekognition not configured. Please set AWS credentials.');
+        }
+    }
+
     /**
      * Create face collection (run once on setup)
      */
     async createCollection(collectionId = null) {
+        this._checkAwsConfigured();
+        
         try {
             const id = collectionId || rekognition.collectionId;
 
@@ -40,6 +54,8 @@ class RekognitionService {
      * Delete face collection
      */
     async deleteCollection(collectionId = null) {
+        this._checkAwsConfigured();
+        
         try {
             const id = collectionId || rekognition.collectionId;
 
@@ -60,6 +76,8 @@ class RekognitionService {
      * Detect faces in an image
      */
     async detectFaces(imageBuffer) {
+        this._checkAwsConfigured();
+        
         try {
             const command = new DetectFacesCommand({
                 Image: {
@@ -84,6 +102,8 @@ class RekognitionService {
      * Index faces from image to collection
      */
     async indexFaces(imageBuffer, externalImageId) {
+        this._checkAwsConfigured();
+        
         try {
             const command = new IndexFacesCommand({
                 CollectionId: rekognition.collectionId,
@@ -123,6 +143,8 @@ class RekognitionService {
      * Search for matching faces in collection
      */
     async searchFacesByImage(imageBuffer, maxFaces = 100) {
+        this._checkAwsConfigured();
+        
         try {
             const command = new SearchFacesByImageCommand({
                 CollectionId: rekognition.collectionId,
@@ -171,6 +193,8 @@ class RekognitionService {
      * Delete indexed faces
      */
     async deleteFaces(faceIds) {
+        this._checkAwsConfigured();
+        
         try {
             if (!faceIds || faceIds.length === 0) {
                 return { deletedFaces: [] };
@@ -198,6 +222,8 @@ class RekognitionService {
      * Process photo: detect faces and index if found
      */
     async processPhoto(imageBuffer, photoId) {
+        this._checkAwsConfigured();
+        
         try {
             // First detect faces
             const detection = await this.detectFaces(imageBuffer);

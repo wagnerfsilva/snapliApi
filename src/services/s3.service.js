@@ -5,16 +5,30 @@ const {
     HeadObjectCommand
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const { s3Client, buckets } = require('../config/aws');
+const { s3Client, buckets, isConfigured } = require('../config/aws');
 const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 
 class S3Service {
+    constructor() {
+        if (!isConfigured || !s3Client) {
+            logger.warn('S3Service initialized but AWS is not configured');
+        }
+    }
+
+    _checkAwsConfigured() {
+        if (!isConfigured || !s3Client) {
+            throw new Error('AWS S3 not configured. Please set AWS credentials.');
+        }
+    }
+
     /**
      * Upload file to S3
      */
     async uploadFile(buffer, filename, mimeType, bucket = 'original') {
+        this._checkAwsConfigured();
+        
         try {
             const bucketName = bucket === 'original' ? buckets.original : buckets.watermarked;
             const key = `${uuidv4()}${path.extname(filename)}`;
@@ -46,6 +60,8 @@ class S3Service {
      * Upload to original bucket (Bucket A)
      */
     async uploadOriginal(buffer, filename, mimeType, eventId) {
+        this._checkAwsConfigured();
+        
         const key = `events/${eventId}/originals/${uuidv4()}${path.extname(filename)}`;
 
         const command = new PutObjectCommand({
@@ -69,6 +85,8 @@ class S3Service {
      * Upload to watermarked bucket (Bucket B)
      */
     async uploadWatermarked(buffer, filename, mimeType, eventId, type = 'watermarked') {
+        this._checkAwsConfigured();
+        
         const folder = type === 'thumbnail' ? 'thumbnails' : 'watermarked';
         const key = `events/${eventId}/${folder}/${uuidv4()}${path.extname(filename)}`;
 
@@ -94,6 +112,8 @@ class S3Service {
      * Get file from S3
      */
     async getFile(key, bucket = 'original') {
+        this._checkAwsConfigured();
+        
         try {
             const bucketName = bucket === 'original' ? buckets.original : buckets.watermarked;
 
@@ -121,6 +141,8 @@ class S3Service {
      * Generate pre-signed URL for secure download
      */
     async generatePresignedUrl(key, bucket = 'original', expiresIn = 3600) {
+        this._checkAwsConfigured();
+        
         try {
             const bucketName = bucket === 'original' ? buckets.original : buckets.watermarked;
 
@@ -142,6 +164,8 @@ class S3Service {
      * Delete file from S3
      */
     async deleteFile(key, bucket = 'original') {
+        this._checkAwsConfigured();
+        
         try {
             const bucketName = bucket === 'original' ? buckets.original : buckets.watermarked;
 
@@ -163,6 +187,8 @@ class S3Service {
      * Check if file exists
      */
     async fileExists(key, bucket = 'original') {
+        this._checkAwsConfigured();
+        
         try {
             const bucketName = bucket === 'original' ? buckets.original : buckets.watermarked;
 
