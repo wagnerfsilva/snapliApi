@@ -19,33 +19,6 @@ router.get('/health', (req, res) => {
     });
 });
 
-// Temporary debug: test login flow
-router.get('/debug-login', async (req, res) => {
-    try {
-        const { User } = require('../models');
-        const bcrypt = require('bcryptjs');
-        const steps = {};
-
-        steps.bcryptjs_loaded = typeof bcrypt.compare === 'function';
-        steps.user_model = typeof User === 'function';
-
-        const user = await User.findOne({ where: { email: 'fotografo@gmail.com' } });
-        steps.user_found = !!user;
-
-        if (user) {
-            steps.has_validatePassword = typeof user.validatePassword === 'function';
-            steps.password_hash_prefix = user.password ? user.password.substring(0, 7) : 'null';
-
-            const isValid = await user.validatePassword('%65434343');
-            steps.password_valid = isValid;
-        }
-
-        res.json({ success: true, steps });
-    } catch (err) {
-        res.json({ success: false, error: err.message, name: err.name, stack: err.stack });
-    }
-});
-
 // Mount routes
 router.use('/auth', authRoutes);
 router.use('/events', eventRoutes);

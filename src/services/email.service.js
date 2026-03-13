@@ -40,7 +40,7 @@ class EmailService {
         }
 
         // Production mode with SMTP configured - use real SMTP
-        return nodemailer.createTransporter({
+        return nodemailer.createTransport({
             host: process.env.SMTP_HOST,
             port: parseInt(process.env.SMTP_PORT) || 587,
             secure: process.env.SMTP_SECURE === 'true',

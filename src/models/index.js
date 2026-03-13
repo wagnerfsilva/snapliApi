@@ -31,7 +31,7 @@ if (config.use_env_variable) {
         sync: async () => {
             console.warn('Database sync skipped - no credentials configured');
         },
-        close: async () => {},
+        close: async () => { },
         define: () => ({})
     };
 }
