@@ -15,15 +15,15 @@ const uploadValidation = [
         .withMessage('ID do evento inválido')
 ];
 
-// All routes require authentication and admin role
-router.use(authenticate, authorize('admin'));
+// Authenticated routes (event admin only)
+router.get('/event/:eventId/gallery', authenticate, authorize('admin'), photoController.getEventPhotosPublic);
 
-// Routes
-router.post('/upload', uploadMultiple, uploadValidation, validate, photoController.upload);
-router.get('/event/:eventId', photoController.getByEvent);
-router.get('/:id', photoController.getById);
-router.get('/:id/download', photoController.getDownloadUrl);
-router.post('/:id/retry', photoController.retryProcessing);
-router.delete('/:id', photoController.delete);
+// Admin-only routes
+router.post('/upload', authenticate, authorize('admin'), uploadMultiple, uploadValidation, validate, photoController.upload);
+router.get('/event/:eventId', authenticate, authorize('admin'), photoController.getByEvent);
+router.get('/:id', authenticate, authorize('admin'), photoController.getById);
+router.get('/:id/download', authenticate, authorize('admin'), photoController.getDownloadUrl);
+router.post('/:id/retry', authenticate, authorize('admin'), photoController.retryProcessing);
+router.delete('/:id', authenticate, authorize('admin'), photoController.delete);
 
 module.exports = router;

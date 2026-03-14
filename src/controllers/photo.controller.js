@@ -334,6 +334,90 @@ class PhotoController {
     }
 
     /**
+     * Get event photos for authenticated users (watermarked only)
+     * Returns only watermarked/thumbnail URLs - never original
+     */
+    async getEventPhotosPublic(req, res, next) {
+        try {
+            const { eventId } = req.params;
+            const {
+                page = 1,
+                limit = 50
+            } = req.query;
+
+            const offset = (parseInt(page) - 1) * parseInt(limit);
+
+            // Verify event exists and is active
+            const event = await Event.findByPk(eventId);
+            if (!event) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Evento não encontrado'
+                });
+            }
+
+            // Verify user is the event owner
+            if (event.createdBy !== req.userId) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Acesso negado. Você não é o administrador deste evento.'
+                });
+            }
+
+            if (!event.isActive) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Evento não está ativo'
+                });
+            }
+
+            const { count, rows: photos } = await Photo.findAndCountAll({
+                where: {
+                    eventId,
+                    processingStatus: 'completed'
+                },
+                limit: parseInt(limit),
+                offset,
+                order: [['createdAt', 'DESC']],
+                attributes: ['id', 'eventId', 'watermarkedKey', 'thumbnailKey', 'width', 'height', 'faceCount', 'createdAt']
+            });
+
+            // Return ONLY watermarked and thumbnail URLs
+            const photosWithUrls = photos.map(photo => ({
+                id: photo.id,
+                eventId: photo.eventId,
+                width: photo.width,
+                height: photo.height,
+                faceCount: photo.faceCount,
+                createdAt: photo.createdAt,
+                watermarkedUrl: s3Service.getPublicUrl(photo.watermarkedKey),
+                thumbnailUrl: photo.thumbnailKey ? s3Service.getPublicUrl(photo.thumbnailKey) : null
+            }));
+
+            res.json({
+                success: true,
+                data: {
+                    event: {
+                        id: event.id,
+                        name: event.name,
+                        date: event.date,
+                        location: event.location
+                    },
+                    photos: photosWithUrls,
+                    pagination: {
+                        total: count,
+                        page: parseInt(page),
+                        limit: parseInt(limit),
+                        totalPages: Math.ceil(count / parseInt(limit))
+                    }
+                }
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
      * Retry failed processing
      */
     async retryProcessing(req, res, next) {
