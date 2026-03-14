@@ -49,7 +49,7 @@ class SearchController {
                     {
                         model: Event,
                         as: 'event',
-                        attributes: ['id', 'name', 'date', 'location']
+                        attributes: ['id', 'name', 'date', 'location', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice']
                     }
                 ],
                 attributes: { exclude: ['faceData'] }
