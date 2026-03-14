@@ -57,8 +57,8 @@ class PhotoController {
                         'watermarked'
                     );
 
-                    // Create thumbnail
-                    const thumbnailBuffer = await imageService.createThumbnail(file.buffer);
+                    // Create thumbnail (from watermarked version to keep watermark)
+                    const thumbnailBuffer = await imageService.createThumbnail(watermarkedBuffer);
                     const thumbnailKey = await s3Service.uploadWatermarked(
                         thumbnailBuffer,
                         file.originalname,
@@ -181,11 +181,14 @@ class PhotoController {
                 attributes: { exclude: ['faceData'] } // Exclude large JSONB field
             });
 
-            // Add public URLs for watermarked images
-            const photosWithUrls = photos.map(photo => ({
-                ...photo.toJSON(),
-                watermarkedUrl: s3Service.getPublicUrl(photo.watermarkedKey),
-                thumbnailUrl: photo.thumbnailKey ? s3Service.getPublicUrl(photo.thumbnailKey) : null
+            // Add presigned URLs for watermarked images
+            const photosWithUrls = await Promise.all(photos.map(async (photo) => {
+                const data = photo.toJSON();
+                return {
+                    ...data,
+                    watermarkedUrl: await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600),
+                    thumbnailUrl: photo.thumbnailKey ? await s3Service.generatePresignedUrl(photo.thumbnailKey, 'watermarked', 3600) : null
+                };
             }));
 
             res.json({
@@ -231,8 +234,8 @@ class PhotoController {
 
             const photoData = {
                 ...photo.toJSON(),
-                watermarkedUrl: s3Service.getPublicUrl(photo.watermarkedKey),
-                thumbnailUrl: photo.thumbnailKey ? s3Service.getPublicUrl(photo.thumbnailKey) : null
+                watermarkedUrl: await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600),
+                thumbnailUrl: photo.thumbnailKey ? await s3Service.generatePresignedUrl(photo.thumbnailKey, 'watermarked', 3600) : null
             };
 
             res.json({

@@ -66,7 +66,14 @@ class SearchController {
                     : null;
 
                 return {
-                    ...photo.toJSON(),
+                    id: photo.id,
+                    eventId: photo.eventId,
+                    event: photo.event,
+                    width: photo.width,
+                    height: photo.height,
+                    faceCount: photo.faceCount,
+                    originalFilename: photo.originalFilename,
+                    createdAt: photo.createdAt,
                     similarity: match?.similarity || 0,
                     watermarkedUrl,
                     thumbnailUrl
@@ -130,11 +137,17 @@ class SearchController {
                 attributes: { exclude: ['faceData'] }
             });
 
-            const photosWithUrls = photos.map(photo => ({
-                ...photo.toJSON(),
-                watermarkedUrl: s3Service.getPublicUrl(photo.watermarkedKey),
-                thumbnailUrl: photo.thumbnailKey ? s3Service.getPublicUrl(photo.thumbnailKey) : null
-            }));
+            const photosWithUrls = await Promise.all(photos.map(async (photo) => ({
+                id: photo.id,
+                eventId: photo.eventId,
+                width: photo.width,
+                height: photo.height,
+                faceCount: photo.faceCount,
+                originalFilename: photo.originalFilename,
+                createdAt: photo.createdAt,
+                watermarkedUrl: await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600),
+                thumbnailUrl: photo.thumbnailKey ? await s3Service.generatePresignedUrl(photo.thumbnailKey, 'watermarked', 3600) : null
+            })));
 
             res.json({
                 success: true,
