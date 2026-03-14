@@ -2,8 +2,13 @@ const axios = require('axios');
 const logger = require('../utils/logger');
 
 // Configuração do cliente Asaas
+const asaasBaseURL = process.env.ASAAS_API_URL ||
+    (process.env.ASAAS_ENVIRONMENT === 'producao'
+        ? 'https://api.asaas.com/v3'
+        : 'https://sandbox.asaas.com/api/v3');
+
 const asaasClient = axios.create({
-    baseURL: process.env.ASAAS_API_URL || 'https://sandbox.asaas.com/api/v3',
+    baseURL: asaasBaseURL,
     headers: {
         'access_token': process.env.ASAAS_API_KEY,
         'Content-Type': 'application/json'
