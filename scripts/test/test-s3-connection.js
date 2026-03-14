@@ -6,7 +6,7 @@
 // Carrega variáveis de ambiente PRIMEIRO
 require('dotenv').config();
 
-const { s3Client, buckets } = require('./src/config/aws');
+const { s3Client, buckets } = require('../src/config/aws');
 const { ListObjectsV2Command, PutObjectCommand, HeadBucketCommand } = require('@aws-sdk/client-s3');
 
 const colors = {

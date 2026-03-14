@@ -9,8 +9,8 @@
  * 5. Cliente acessa portal
  */
 
-const { Order, OrderItem, Photo, Event } = require('./src/models');
-const emailService = require('./src/services/email.service');
+const { Order, OrderItem, Photo, Event } = require('../src/models');
+const emailService = require('../src/services/email.service');
 const crypto = require('crypto');
 
 async function simulateFullFlow() {

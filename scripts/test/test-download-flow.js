@@ -4,7 +4,7 @@
  * Usage: node test-download-flow.js
  */
 
-const { Order, OrderItem, Photo, Event, User } = require('./src/models');
+const { Order, OrderItem, Photo, Event, User } = require('../src/models');
 const crypto = require('crypto');
 
 async function createTestOrder() {

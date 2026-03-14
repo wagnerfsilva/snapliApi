@@ -3,7 +3,7 @@
  */
 
 require('dotenv').config();
-const { Photo, Event } = require('./src/models');
+const { Photo, Event } = require('../src/models');
 
 async function cleanupFailedPhotos() {
     try {

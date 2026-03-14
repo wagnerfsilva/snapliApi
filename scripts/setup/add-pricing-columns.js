@@ -1,7 +1,7 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-const config = require('./src/config/database');
+const config = require('../src/config/database');
 const dbConfig = config.development;
 
 const sequelize = new Sequelize(

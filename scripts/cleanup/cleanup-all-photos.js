@@ -3,10 +3,10 @@
  */
 
 require('dotenv').config();
-const { Photo, Event } = require('./src/models');
-const { s3Client } = require('./src/config/aws');
+const { Photo, Event } = require('../src/models');
+const { s3Client } = require('../src/config/aws');
 const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
-const { buckets } = require('./src/config/aws');
+const { buckets } = require('../src/config/aws');
 
 async function deleteFromS3(key, bucket) {
     try {

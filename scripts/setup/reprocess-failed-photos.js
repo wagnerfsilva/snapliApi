@@ -3,8 +3,8 @@
  */
 
 require('dotenv').config();
-const { Photo } = require('./src/models');
-const PhotoController = require('./src/controllers/photo.controller');
+const { Photo } = require('../src/models');
+const PhotoController = require('../src/controllers/photo.controller');
 
 async function reprocessFailedPhotos() {
     try {

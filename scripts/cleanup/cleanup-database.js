@@ -1,4 +1,4 @@
-const { Event, Photo, Order, OrderItem, sequelize } = require('./src/models');
+const { Event, Photo, Order, OrderItem, sequelize } = require('../src/models');
 
 async function cleanupDatabase() {
     try {

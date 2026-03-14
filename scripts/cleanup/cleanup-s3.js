@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { s3Client, rekognitionClient, buckets, rekognition } = require('./src/config/aws');
+const { s3Client, rekognitionClient, buckets, rekognition } = require('../src/config/aws');
 const {
     ListObjectsV2Command,
     DeleteObjectsCommand,

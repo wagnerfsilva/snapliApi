@@ -1,4 +1,4 @@
-const { Order, OrderItem, Photo, sequelize } = require('./src/models');
+const { Order, OrderItem, Photo, sequelize } = require('../src/models');
 
 async function seedSalesData() {
     try {

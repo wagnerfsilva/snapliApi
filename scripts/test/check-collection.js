@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { rekognitionClient, rekognition } = require('./src/config/aws');
+const { rekognitionClient, rekognition } = require('../src/config/aws');
 const { ListFacesCommand, DescribeCollectionCommand } = require('@aws-sdk/client-rekognition');
 
 async function checkCollection() {
