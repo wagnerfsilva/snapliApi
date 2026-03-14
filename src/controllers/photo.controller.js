@@ -382,17 +382,17 @@ class PhotoController {
                 attributes: ['id', 'eventId', 'watermarkedKey', 'thumbnailKey', 'width', 'height', 'faceCount', 'createdAt']
             });
 
-            // Return ONLY watermarked and thumbnail URLs
-            const photosWithUrls = photos.map(photo => ({
+            // Return ONLY watermarked and thumbnail presigned URLs
+            const photosWithUrls = await Promise.all(photos.map(async (photo) => ({
                 id: photo.id,
                 eventId: photo.eventId,
                 width: photo.width,
                 height: photo.height,
                 faceCount: photo.faceCount,
                 createdAt: photo.createdAt,
-                watermarkedUrl: s3Service.getPublicUrl(photo.watermarkedKey),
-                thumbnailUrl: photo.thumbnailKey ? s3Service.getPublicUrl(photo.thumbnailKey) : null
-            }));
+                watermarkedUrl: await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600),
+                thumbnailUrl: photo.thumbnailKey ? await s3Service.generatePresignedUrl(photo.thumbnailKey, 'watermarked', 3600) : null
+            })));
 
             res.json({
                 success: true,
