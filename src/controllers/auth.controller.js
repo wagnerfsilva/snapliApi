@@ -68,7 +68,8 @@ class AuthController {
                 }
             });
         } catch (error) {
-            next(error);
+            logger.error('Login error:', error);
+            res.status(500).json({ success: false, debug_error: error.message, debug_name: error.name });
         }
     }
 
