@@ -41,7 +41,8 @@ module.exports = {
             ssl: {
                 require: true,
                 rejectUnauthorized: false
-            }
+            },
+            family: 4
         },
         logging: false,
         pool: {
