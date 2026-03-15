@@ -85,6 +85,12 @@ const createPixPayment = async ({ customerName, customerEmail, amount, orderId, 
             };
         }
 
+        // Validar valor mínimo do Asaas (R$ 5,00 para PIX em produção)
+        const ASAAS_MIN_PIX_VALUE = 5.00;
+        if (amount < ASAAS_MIN_PIX_VALUE) {
+            throw new Error(`O valor mínimo para pagamento PIX é R$ ${ASAAS_MIN_PIX_VALUE.toFixed(2)}. Valor atual: R$ ${amount.toFixed(2)}. Adicione mais fotos ao carrinho.`);
+        }
+
         // Produção: Busca ou cria o customer
         const customerId = await getOrCreateCustomer(customerName, customerEmail);
 
