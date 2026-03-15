@@ -16,6 +16,9 @@ router.get('/:orderId', orderController.getOrder);
 // Validate payment status
 router.get('/:orderId/validate-payment', orderController.validatePayment);
 
+// Get PIX QR Code for an order
+router.get('/:orderId/pix-qrcode', orderController.getPixQrCode);
+
 // Asaas webhook
 router.post('/webhook/asaas', orderController.asaasWebhook);
 

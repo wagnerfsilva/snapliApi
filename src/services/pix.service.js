@@ -101,21 +101,43 @@ const createPixPayment = async ({ customerName, customerEmail, amount, orderId, 
 
         const payment = response.data;
 
-        // Busca os dados do QR Code PIX
-        const pixResponse = await asaasClient.get(`/payments/${payment.id}/pixQrCode`);
-        const pixData = pixResponse.data;
+        // Busca os dados do QR Code PIX (com retry, pois o Asaas pode demorar para gerar)
+        let pixData = null;
+        let qrCodeImage = null;
+        const maxRetries = 5;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const pixResponse = await asaasClient.get(`/payments/${payment.id}/pixQrCode`);
+                pixData = pixResponse.data;
+
+                if (pixData && pixData.encodedImage) {
+                    qrCodeImage = pixData.encodedImage;
+                    if (!qrCodeImage.startsWith('data:')) {
+                        qrCodeImage = `data:image/png;base64,${qrCodeImage}`;
+                    }
+                    break;
+                }
+
+                logger.warn(`QR Code vazio na tentativa ${attempt}/${maxRetries}`, { paymentId: payment.id });
+            } catch (qrError) {
+                logger.warn(`Erro ao buscar QR Code na tentativa ${attempt}/${maxRetries}`, {
+                    paymentId: payment.id,
+                    error: qrError.message
+                });
+            }
+
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        }
 
         logger.info('Cobrança PIX criada com sucesso', {
             paymentId: payment.id,
             orderId,
-            amount
+            amount,
+            qrCodeAvailable: !!qrCodeImage
         });
-
-        // Garantir que o QR Code tenha o prefixo data:image
-        let qrCodeImage = pixData.encodedImage;
-        if (qrCodeImage && !qrCodeImage.startsWith('data:')) {
-            qrCodeImage = `data:image/png;base64,${qrCodeImage}`;
-        }
 
         return {
             id: payment.id,
@@ -235,9 +257,43 @@ const handleAsaasWebhook = async (webhookData) => {
     }
 };
 
+/**
+ * Busca o QR Code PIX de um pagamento existente
+ */
+const getPixQrCode = async (paymentId) => {
+    try {
+        if (process.env.NODE_ENV === 'development' && !process.env.ASAAS_API_KEY) {
+            return {
+                pixQrCode: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+                pixCopyPaste: '00020126580014br.gov.bcb.pix0136simulation-pix-code-here'
+            };
+        }
+
+        const pixResponse = await asaasClient.get(`/payments/${paymentId}/pixQrCode`);
+        const pixData = pixResponse.data;
+
+        let qrCodeImage = pixData.encodedImage;
+        if (qrCodeImage && !qrCodeImage.startsWith('data:')) {
+            qrCodeImage = `data:image/png;base64,${qrCodeImage}`;
+        }
+
+        return {
+            pixQrCode: qrCodeImage || null,
+            pixCopyPaste: pixData.payload || null
+        };
+    } catch (error) {
+        logger.error('Erro ao buscar QR Code PIX', {
+            paymentId,
+            error: error.message
+        });
+        return { pixQrCode: null, pixCopyPaste: null };
+    }
+};
+
 module.exports = {
     createPixPayment,
     validatePixPayment,
     confirmPixPaymentManually,
-    handleAsaasWebhook
+    handleAsaasWebhook,
+    getPixQrCode
 };

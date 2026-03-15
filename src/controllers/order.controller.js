@@ -351,6 +351,39 @@ exports.validatePayment = async (req, res) => {
 };
 
 /**
+ * Busca QR Code PIX de um pedido
+ */
+exports.getPixQrCode = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+
+        const order = await Order.findByPk(orderId);
+
+        if (!order) {
+            return res.status(404).json({ error: 'Pedido não encontrado' });
+        }
+
+        if (!order.paymentId) {
+            return res.status(400).json({ error: 'Pedido sem pagamento associado' });
+        }
+
+        const pixData = await pixService.getPixQrCode(order.paymentId);
+
+        res.json({
+            success: true,
+            payment: {
+                pixQrCode: pixData.pixQrCode,
+                pixCopyPaste: pixData.pixCopyPaste
+            }
+        });
+
+    } catch (error) {
+        logger.error('Erro ao buscar QR Code:', error);
+        res.status(500).json({ error: 'Erro ao buscar QR Code' });
+    }
+};
+
+/**
  * Webhook do Asaas para notificações de pagamento
  */
 exports.asaasWebhook = async (req, res) => {
