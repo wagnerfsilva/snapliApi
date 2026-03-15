@@ -11,11 +11,16 @@ const orderRoutes = require('./order.routes');
 
 // Health check
 router.get('/health', (req, res) => {
+    const asaasKey = process.env.ASAAS_API_KEY;
     res.json({
         success: true,
         message: 'API is running',
         timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV
+        environment: process.env.NODE_ENV,
+        asaas: {
+            configured: !!asaasKey,
+            environment: process.env.ASAAS_ENVIRONMENT || 'NOT SET'
+        }
     });
 });
 
