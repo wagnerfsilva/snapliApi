@@ -7,10 +7,24 @@ const asaasBaseURL = process.env.ASAAS_API_URL ||
         ? 'https://api.asaas.com/v3'
         : 'https://sandbox.asaas.com/api/v3');
 
+const asaasApiKey = process.env.ASAAS_API_KEY;
+
+// Log de diagnóstico na inicialização
+if (!asaasApiKey) {
+    logger.error('ASAAS_API_KEY não está configurada!');
+} else {
+    const keyStart = asaasApiKey.substring(0, 15);
+    const keyLen = asaasApiKey.length;
+    logger.info(`Asaas configurado: env=${process.env.ASAAS_ENVIRONMENT}, url=${asaasBaseURL}, key=${keyStart}... (${keyLen} chars)`);
+    if (!asaasApiKey.startsWith('$aact_')) {
+        logger.warn(`ASAAS_API_KEY não começa com $aact_ — pode estar com problema de interpolação. Começa com: ${keyStart}`);
+    }
+}
+
 const asaasClient = axios.create({
     baseURL: asaasBaseURL,
     headers: {
-        'access_token': process.env.ASAAS_API_KEY,
+        'access_token': asaasApiKey,
         'Content-Type': 'application/json'
     }
 });
@@ -35,7 +49,8 @@ const getOrCreateCustomer = async (customerName, customerEmail) => {
             // Se o customer não tem CPF, atualiza com um genérico
             if (!customer.cpfCnpj) {
                 await asaasClient.put(`/customers/${customer.id}`, {
-                    cpfCnpj: '24971563792' // CPF genérico para sandbox
+                    cpfCnpj: '24971563792', // CPF genérico para sandbox
+                    notificationDisabled: true
                 });
                 logger.info('Customer atualizado com CPF', { customerId: customer.id });
             } else {
@@ -50,7 +65,7 @@ const getOrCreateCustomer = async (customerName, customerEmail) => {
             name: customerName,
             email: customerEmail,
             cpfCnpj: '24971563792',  // CPF genérico para sandbox
-            notificationDisabled: false
+            notificationDisabled: true
         });
 
         logger.info('Customer criado no Asaas', { customerId: createResponse.data.id });
