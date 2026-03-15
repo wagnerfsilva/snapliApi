@@ -114,6 +114,7 @@ exports.createOrder = async (req, res) => {
 
         // Criar cobrança PIX no Asaas
         let pixPayment;
+        let pixError = null;
         try {
             pixPayment = await pixService.createPixPayment({
                 customerName,
@@ -136,8 +137,11 @@ exports.createOrder = async (req, res) => {
             });
 
         } catch (error) {
-            logger.error('Erro ao criar cobrança PIX', { error: error.message });
-            // Continua mesmo se falhar (em dev mode sem API key configurada)
+            pixError = error.message;
+            logger.error('Erro ao criar cobrança PIX', {
+                error: error.message,
+                orderId: order.id
+            });
         }
 
         // Retornar pedido com dados do PIX
@@ -158,7 +162,10 @@ exports.createOrder = async (req, res) => {
                 pixCopyPaste: pixPayment.pixCopyPaste,
                 expiresAt: pixPayment.expirationDate
             } : null,
-            message: 'Pedido criado. Realize o pagamento para liberar o download.'
+            pixError: pixError,
+            message: pixPayment
+                ? 'Pedido criado. Realize o pagamento para liberar o download.'
+                : `Pedido criado, mas houve erro ao gerar pagamento PIX: ${pixError}`
         });
 
     } catch (error) {
@@ -357,16 +364,61 @@ exports.getPixQrCode = async (req, res) => {
     try {
         const { orderId } = req.params;
 
-        const order = await Order.findByPk(orderId);
+        const order = await Order.findByPk(orderId, {
+            include: [{
+                model: OrderItem,
+                as: 'items',
+                attributes: ['id']
+            }]
+        });
 
         if (!order) {
             return res.status(404).json({ error: 'Pedido não encontrado' });
         }
 
+        // Se não tem paymentId, tenta criar o pagamento PIX agora
         if (!order.paymentId) {
-            return res.status(400).json({ error: 'Pedido sem pagamento associado' });
+            logger.info('Pedido sem paymentId, tentando criar cobrança PIX', { orderId });
+
+            try {
+                const pixPayment = await pixService.createPixPayment({
+                    customerName: order.customerName,
+                    customerEmail: order.customerEmail,
+                    amount: order.totalAmount,
+                    orderId: order.id,
+                    description: `Pedido #${order.id.substring(0, 8)} - ${order.items?.length || 1} foto(s)`
+                });
+
+                await order.update({
+                    paymentId: pixPayment.id,
+                    paymentMethod: 'PIX',
+                    paymentLink: pixPayment.invoiceUrl
+                });
+
+                logger.info('Cobrança PIX criada via getPixQrCode', {
+                    orderId: order.id,
+                    paymentId: pixPayment.id
+                });
+
+                return res.json({
+                    success: true,
+                    payment: {
+                        pixQrCode: pixPayment.pixQrCode,
+                        pixCopyPaste: pixPayment.pixCopyPaste
+                    }
+                });
+            } catch (pixError) {
+                logger.error('Erro ao criar cobrança PIX no retry', {
+                    orderId,
+                    error: pixError.message
+                });
+                return res.status(500).json({
+                    error: `Erro ao gerar pagamento PIX: ${pixError.message}`
+                });
+            }
         }
 
+        // Se já tem paymentId, busca o QR Code
         const pixData = await pixService.getPixQrCode(order.paymentId);
 
         res.json({

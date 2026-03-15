@@ -89,11 +89,16 @@ const createPixPayment = async ({ customerName, customerEmail, amount, orderId, 
         const customerId = await getOrCreateCustomer(customerName, customerEmail);
 
         // Cria a cobrança PIX (sem payer, o CPF já está no customer)
+        // Usa horário de Brasília para a dueDate
+        const now = new Date();
+        const brDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+        const dueDate = brDate.toISOString().split('T')[0];
+
         const response = await asaasClient.post('/payments', {
             customer: customerId,
             billingType: 'PIX',
             value: amount,
-            dueDate: new Date().toISOString().split('T')[0], // Hoje
+            dueDate,
             description: description || `Pedido #${orderId} - Fotos Fotow`,
             externalReference: orderId,
             postalService: false
@@ -143,10 +148,10 @@ const createPixPayment = async ({ customerName, customerEmail, amount, orderId, 
             id: payment.id,
             invoiceUrl: payment.invoiceUrl,
             pixQrCode: qrCodeImage, // QR Code em base64 com prefixo
-            pixCopyPaste: pixData.payload, // Copia e cola
+            pixCopyPaste: pixData?.payload || null, // Copia e cola
             status: payment.status,
             dueDate: payment.dueDate,
-            expirationDate: pixData.expirationDate
+            expirationDate: pixData?.expirationDate || null
         };
 
     } catch (error) {
