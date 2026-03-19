@@ -48,7 +48,7 @@ class ImageService {
             const text = watermarkText || process.env.WATERMARK_TEXT || 'FOTOW';
             const opacity = parseFloat(process.env.WATERMARK_OPACITY) || 0.4;
 
-            // Step 1: Resize image first to get actual output dimensions
+            // Step 1: Resize image first
             const resizedBuffer = await sharp(buffer)
                 .resize(1920, null, {
                     fit: 'inside',
@@ -56,30 +56,30 @@ class ImageService {
                 })
                 .toBuffer();
 
-            // Step 2: Get metadata of the RESIZED image
             const metadata = await sharp(resizedBuffer).metadata();
             const width = metadata.width;
             const height = metadata.height;
 
-            // Step 3: Multi-layer watermark with stroke for visibility on any background
-            const strokeWidth = 1;
+            // Step 2: Build SVG watermark using generic 'sans-serif' font
+            // (Arial/Helvetica are NOT available on Linux production servers)
+            const strokeW = 1;
 
-            // Layer 1 - Dense diagonal pattern (primary)
+            // Layer 1 - Dense diagonal pattern
             const fs1 = Math.max(Math.floor(width / 18), 18);
             const th1 = Math.ceil(fs1 * 1.3);
-            const pw1 = Math.ceil(text.length * fs1 * 0.65 * 1.15);
+            const pw1 = Math.ceil(text.length * fs1 * 0.7 * 1.15);
             const ph1 = Math.ceil(th1 * 2.0);
 
             // Layer 2 - Larger text, opposite angle
             const fs2 = Math.max(Math.floor(width / 9), 30);
             const th2 = Math.ceil(fs2 * 1.3);
-            const pw2 = Math.ceil(text.length * fs2 * 0.65 * 1.3);
+            const pw2 = Math.ceil(text.length * fs2 * 0.7 * 1.3);
             const ph2 = Math.ceil(th2 * 2.5);
 
             // Layer 3 - Small dense micro-text
             const fs3 = Math.max(Math.floor(width / 35), 12);
             const th3 = Math.ceil(fs3 * 1.3);
-            const pw3 = Math.ceil(text.length * fs3 * 0.65 * 1.1);
+            const pw3 = Math.ceil(text.length * fs3 * 0.7 * 1.1);
             const ph3 = Math.ceil(th3 * 1.6);
 
             // Layer 4 - Center band
@@ -87,33 +87,36 @@ class ImageService {
             const bandHeight = Math.ceil(height * 0.12);
             const bandY = Math.floor((height - bandHeight) / 2);
 
-            // Use text with dark stroke outline so it's visible on both light and dark areas
             const svgWatermark = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <pattern id="wm1" width="${pw1}" height="${ph1}" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)">
-      <text x="0" y="${th1}" font-size="${fs1}" font-family="Arial, Helvetica, sans-serif" font-weight="bold"
-        fill="white" fill-opacity="${opacity}" stroke="black" stroke-opacity="${opacity * 0.5}" stroke-width="${strokeWidth}">${text}</text>
+      <text x="0" y="${th1}" font-size="${fs1}" font-weight="bold"
+        font-family="DejaVu Sans, Liberation Sans, sans-serif" fill="white" fill-opacity="${opacity}"
+        stroke="black" stroke-opacity="${opacity * 0.5}" stroke-width="${strokeW}">${text}</text>
     </pattern>
     <pattern id="wm2" width="${pw2}" height="${ph2}" patternUnits="userSpaceOnUse" patternTransform="rotate(40)">
-      <text x="0" y="${th2}" font-size="${fs2}" font-family="Arial, Helvetica, sans-serif" font-weight="bold"
-        fill="white" fill-opacity="${opacity * 0.7}" stroke="black" stroke-opacity="${opacity * 0.35}" stroke-width="${strokeWidth}">${text}</text>
+      <text x="0" y="${th2}" font-size="${fs2}" font-weight="bold"
+        font-family="DejaVu Sans, Liberation Sans, sans-serif" fill="white" fill-opacity="${opacity * 0.7}"
+        stroke="black" stroke-opacity="${opacity * 0.35}" stroke-width="${strokeW}">${text}</text>
     </pattern>
     <pattern id="wm3" width="${pw3}" height="${ph3}" patternUnits="userSpaceOnUse" patternTransform="rotate(-55)">
-      <text x="0" y="${th3}" font-size="${fs3}" font-family="Arial, Helvetica, sans-serif" font-weight="bold"
-        fill="white" fill-opacity="${opacity * 0.6}" stroke="black" stroke-opacity="${opacity * 0.3}" stroke-width="${strokeWidth * 0.5}">${text}</text>
+      <text x="0" y="${th3}" font-size="${fs3}" font-weight="bold"
+        font-family="DejaVu Sans, Liberation Sans, sans-serif" fill="white" fill-opacity="${opacity * 0.6}"
+        stroke="black" stroke-opacity="${opacity * 0.3}" stroke-width="${Math.max(strokeW * 0.5, 0.5)}">${text}</text>
     </pattern>
   </defs>
   <rect width="100%" height="100%" fill="url(#wm1)"/>
   <rect width="100%" height="100%" fill="url(#wm2)"/>
   <rect width="100%" height="100%" fill="url(#wm3)"/>
-  <rect x="0" y="${bandY}" width="100%" height="${bandHeight}" fill="rgba(0,0,0,${opacity * 0.4})"/>
-  <text x="${Math.floor(width / 2)}" y="${bandY + Math.floor(bandHeight / 2) + Math.floor(fs4 * 0.35)}" font-size="${fs4}" font-family="Arial, Helvetica, sans-serif" font-weight="bold"
-    fill="white" fill-opacity="${Math.min(opacity * 2, 0.85)}" stroke="black" stroke-opacity="${opacity * 0.6}" stroke-width="${strokeWidth * 2}" text-anchor="middle" letter-spacing="${Math.floor(fs4 * 0.25)}">${text}</text>
+  <rect x="0" y="${bandY}" width="100%" height="${bandHeight}" fill="black" fill-opacity="${opacity * 0.4}"/>
+  <text x="${Math.floor(width / 2)}" y="${bandY + Math.floor(bandHeight / 2) + Math.floor(fs4 * 0.35)}" font-size="${fs4}" font-weight="bold"
+    font-family="DejaVu Sans, Liberation Sans, sans-serif" fill="white" fill-opacity="${Math.min(opacity * 2, 0.85)}"
+    stroke="black" stroke-opacity="${opacity * 0.6}" stroke-width="${strokeW * 2}" text-anchor="middle" letter-spacing="${Math.floor(fs4 * 0.25)}">${text}</text>
 </svg>`;
 
             const watermarkBuffer = Buffer.from(svgWatermark);
 
-            // Step 4: Composite watermark onto resized image
+            // Step 3: Composite watermark onto resized image
             return await sharp(resizedBuffer)
                 .composite([{
                     input: watermarkBuffer,
