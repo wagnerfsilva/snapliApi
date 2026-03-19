@@ -46,7 +46,7 @@ class ImageService {
     async applyWatermark(buffer, watermarkText = null) {
         try {
             const text = watermarkText || process.env.WATERMARK_TEXT || 'FOTOW';
-            const opacity = parseFloat(process.env.WATERMARK_OPACITY) || 0.3;
+            const opacity = parseFloat(process.env.WATERMARK_OPACITY) || 0.4;
 
             // Step 1: Resize image first to get actual output dimensions
             const resizedBuffer = await sharp(buffer)
@@ -61,54 +61,54 @@ class ImageService {
             const width = metadata.width;
             const height = metadata.height;
 
-            // Step 3: Multi-layer watermark for maximum protection
+            // Step 3: Multi-layer watermark with stroke for visibility on any background
+            const strokeWidth = 1;
+
             // Layer 1 - Dense diagonal pattern (primary)
-            const fontSize1 = Math.max(Math.floor(width / 20), 16);
-            const th1 = Math.ceil(fontSize1 * 1.2);
-            const tw1 = Math.ceil(text.length * fontSize1 * 0.6);
-            const pw1 = Math.ceil(tw1 * 1.2);
-            const ph1 = Math.ceil(th1 * 2.2);
+            const fs1 = Math.max(Math.floor(width / 18), 18);
+            const th1 = Math.ceil(fs1 * 1.3);
+            const pw1 = Math.ceil(text.length * fs1 * 0.65 * 1.15);
+            const ph1 = Math.ceil(th1 * 2.0);
 
             // Layer 2 - Larger text, opposite angle
-            const fontSize2 = Math.max(Math.floor(width / 10), 28);
-            const th2 = Math.ceil(fontSize2 * 1.2);
-            const tw2 = Math.ceil(text.length * fontSize2 * 0.6);
-            const pw2 = Math.ceil(tw2 * 1.4);
-            const ph2 = Math.ceil(th2 * 2.8);
+            const fs2 = Math.max(Math.floor(width / 9), 30);
+            const th2 = Math.ceil(fs2 * 1.3);
+            const pw2 = Math.ceil(text.length * fs2 * 0.65 * 1.3);
+            const ph2 = Math.ceil(th2 * 2.5);
 
-            // Layer 3 - Small dense micro-text (hard to clone-stamp out)
-            const fontSize3 = Math.max(Math.floor(width / 40), 10);
-            const th3 = Math.ceil(fontSize3 * 1.2);
-            const tw3 = Math.ceil(text.length * fontSize3 * 0.6);
-            const pw3 = Math.ceil(tw3 * 1.1);
-            const ph3 = Math.ceil(th3 * 1.8);
+            // Layer 3 - Small dense micro-text
+            const fs3 = Math.max(Math.floor(width / 35), 12);
+            const th3 = Math.ceil(fs3 * 1.3);
+            const pw3 = Math.ceil(text.length * fs3 * 0.65 * 1.1);
+            const ph3 = Math.ceil(th3 * 1.6);
 
-            // Layer 4 - Center band with larger prominent text
-            const fontSize4 = Math.max(Math.floor(width / 8), 36);
-            const bandHeight = Math.ceil(height * 0.15);
+            // Layer 4 - Center band
+            const fs4 = Math.max(Math.floor(width / 7), 40);
+            const bandHeight = Math.ceil(height * 0.12);
             const bandY = Math.floor((height - bandHeight) / 2);
 
+            // Use text with dark stroke outline so it's visible on both light and dark areas
             const svgWatermark = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <pattern id="wm1" width="${pw1}" height="${ph1}" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)">
-      <text x="0" y="${th1}" font-size="${fontSize1}" font-family="Arial, Helvetica, sans-serif" font-weight="bold" fill="white" fill-opacity="${opacity}">${text}</text>
+      <text x="0" y="${th1}" font-size="${fs1}" font-family="Arial, Helvetica, sans-serif" font-weight="bold"
+        fill="white" fill-opacity="${opacity}" stroke="black" stroke-opacity="${opacity * 0.5}" stroke-width="${strokeWidth}">${text}</text>
     </pattern>
-    <pattern id="wm2" width="${pw2}" height="${ph2}" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
-      <text x="0" y="${th2}" font-size="${fontSize2}" font-family="Arial, Helvetica, sans-serif" font-weight="bold" fill="white" fill-opacity="${opacity * 0.6}">${text}</text>
+    <pattern id="wm2" width="${pw2}" height="${ph2}" patternUnits="userSpaceOnUse" patternTransform="rotate(40)">
+      <text x="0" y="${th2}" font-size="${fs2}" font-family="Arial, Helvetica, sans-serif" font-weight="bold"
+        fill="white" fill-opacity="${opacity * 0.7}" stroke="black" stroke-opacity="${opacity * 0.35}" stroke-width="${strokeWidth}">${text}</text>
     </pattern>
-    <pattern id="wm3" width="${pw3}" height="${ph3}" patternUnits="userSpaceOnUse" patternTransform="rotate(-60)">
-      <text x="0" y="${th3}" font-size="${fontSize3}" font-family="Arial, Helvetica, sans-serif" fill="white" fill-opacity="${opacity * 0.5}">${text}</text>
+    <pattern id="wm3" width="${pw3}" height="${ph3}" patternUnits="userSpaceOnUse" patternTransform="rotate(-55)">
+      <text x="0" y="${th3}" font-size="${fs3}" font-family="Arial, Helvetica, sans-serif" font-weight="bold"
+        fill="white" fill-opacity="${opacity * 0.6}" stroke="black" stroke-opacity="${opacity * 0.3}" stroke-width="${strokeWidth * 0.5}">${text}</text>
     </pattern>
   </defs>
-  <!-- Layer 1: Dense diagonal pattern -->
   <rect width="100%" height="100%" fill="url(#wm1)"/>
-  <!-- Layer 2: Larger counter-angle pattern -->
   <rect width="100%" height="100%" fill="url(#wm2)"/>
-  <!-- Layer 3: Micro-text dense fill -->
   <rect width="100%" height="100%" fill="url(#wm3)"/>
-  <!-- Layer 4: Prominent center band -->
-  <rect x="0" y="${bandY}" width="100%" height="${bandHeight}" fill="rgba(0,0,0,${opacity * 0.35})"/>
-  <text x="${Math.floor(width / 2)}" y="${bandY + Math.floor(bandHeight / 2) + Math.floor(fontSize4 * 0.35)}" font-size="${fontSize4}" font-family="Arial, Helvetica, sans-serif" font-weight="bold" fill="white" fill-opacity="${opacity * 1.8}" text-anchor="middle" letter-spacing="${Math.floor(fontSize4 * 0.3)}">${text}</text>
+  <rect x="0" y="${bandY}" width="100%" height="${bandHeight}" fill="rgba(0,0,0,${opacity * 0.4})"/>
+  <text x="${Math.floor(width / 2)}" y="${bandY + Math.floor(bandHeight / 2) + Math.floor(fs4 * 0.35)}" font-size="${fs4}" font-family="Arial, Helvetica, sans-serif" font-weight="bold"
+    fill="white" fill-opacity="${Math.min(opacity * 2, 0.85)}" stroke="black" stroke-opacity="${opacity * 0.6}" stroke-width="${strokeWidth * 2}" text-anchor="middle" letter-spacing="${Math.floor(fs4 * 0.25)}">${text}</text>
 </svg>`;
 
             const watermarkBuffer = Buffer.from(svgWatermark);
