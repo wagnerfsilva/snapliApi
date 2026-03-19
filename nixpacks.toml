@@ -1,3 +1,2 @@
 [phases.setup]
-nixPkgs = ["fontconfig", "freetype", "dejavu_fonts"]
-aptPkgs = ["fonts-dejavu-core", "fontconfig"]
+nixPkgs = ["...", "fontconfig", "freetype", "dejavu_fonts"]
