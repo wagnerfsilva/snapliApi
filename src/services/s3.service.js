@@ -140,16 +140,22 @@ class S3Service {
     /**
      * Generate pre-signed URL for secure download
      */
-    async generatePresignedUrl(key, bucket = 'original', expiresIn = 3600) {
+    async generatePresignedUrl(key, bucket = 'original', expiresIn = 3600, options = {}) {
         this._checkAwsConfigured();
         
         try {
             const bucketName = bucket === 'original' ? buckets.original : buckets.watermarked;
 
-            const command = new GetObjectCommand({
+            const commandInput = {
                 Bucket: bucketName,
                 Key: key
-            });
+            };
+
+            if (options.downloadFilename) {
+                commandInput.ResponseContentDisposition = `attachment; filename="${options.downloadFilename}"`;
+            }
+
+            const command = new GetObjectCommand(commandInput);
 
             const url = await getSignedUrl(s3Client, command, { expiresIn });
 

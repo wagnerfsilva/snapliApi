@@ -183,10 +183,12 @@ exports.downloadPhoto = async (req, res) => {
         const photo = orderItem.photo;
 
         // Generate presigned URL for original photo (1 hour expiration)
+        // Include Content-Disposition: attachment to force browser download
         const downloadUrl = await s3Service.generatePresignedUrl(
             photo.originalKey,
             'original',
-            3600 // 1 hour
+            3600, // 1 hour
+            { downloadFilename: photo.originalFilename }
         );
 
         // Update download statistics
