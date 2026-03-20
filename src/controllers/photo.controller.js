@@ -1,5 +1,7 @@
 const { Photo, Event } = require('../models');
 const { Op } = require('sequelize');
+const crypto = require('crypto');
+const path = require('path');
 const s3Service = require('../services/s3.service');
 const imageService = require('../services/image.service');
 const rekognitionService = require('../services/rekognition.service');
@@ -36,13 +38,18 @@ class PhotoController {
             // Process each file
             for (const file of files) {
                 try {
+                    // Generate hash-based filename preserving only the extension
+                    const ext = path.extname(file.originalname).toLowerCase();
+                    const hash = crypto.randomBytes(16).toString('hex');
+                    const hashedFilename = `${hash}${ext}`;
+
                     // Get image metadata
                     const metadata = await imageService.getMetadata(file.buffer);
 
                     // Upload original to Bucket A
                     const originalKey = await s3Service.uploadOriginal(
                         file.buffer,
-                        file.originalname,
+                        hashedFilename,
                         file.mimetype,
                         eventId
                     );
@@ -51,7 +58,7 @@ class PhotoController {
                     const watermarkedBuffer = await imageService.applyWatermark(file.buffer);
                     const watermarkedKey = await s3Service.uploadWatermarked(
                         watermarkedBuffer,
-                        file.originalname,
+                        hashedFilename,
                         'image/jpeg',
                         eventId,
                         'watermarked'
@@ -61,7 +68,7 @@ class PhotoController {
                     const thumbnailBuffer = await imageService.createThumbnail(watermarkedBuffer);
                     const thumbnailKey = await s3Service.uploadWatermarked(
                         thumbnailBuffer,
-                        file.originalname,
+                        hashedFilename,
                         'image/jpeg',
                         eventId,
                         'thumbnail'
@@ -70,7 +77,7 @@ class PhotoController {
                     // Create photo record
                     const photo = await Photo.create({
                         eventId,
-                        originalFilename: file.originalname,
+                        originalFilename: hashedFilename,
                         originalKey,
                         watermarkedKey,
                         thumbnailKey,
@@ -90,7 +97,7 @@ class PhotoController {
 
                     uploadResults.push({
                         id: photo.id,
-                        filename: file.originalname,
+                        filename: hashedFilename,
                         status: 'success'
                     });
 
