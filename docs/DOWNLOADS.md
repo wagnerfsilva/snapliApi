@@ -1,4 +1,4 @@
-# 📥 Sistema de Downloads - Fotow
+# 📥 Sistema de Downloads - Snapli
 
 ## 🎯 Visão Geral
 
@@ -41,7 +41,7 @@ emailService.sendDownloadEmail(order);
 ### 3. Cliente Acessa Portal
 
 ```
-https://fotow.com/downloads/{token}
+https://snapli.com/downloads/{token}
 ```
 
 ### 4. Download das Fotos
@@ -65,7 +65,7 @@ Retorna detalhes do pedido e lista de fotos
   "order": {
     "id": "uuid",
     "customerName": "Cliente Teste",
-    "customerEmail": "teste@fotow.com",
+    "customerEmail": "teste@snapli.com",
     "totalAmount": "15.00",
     "paidAt": "2026-01-22T15:17:58.144Z",
     "downloadExpiresAt": "2026-04-22T15:17:58.145Z",
@@ -201,7 +201,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=seu-email@gmail.com
 SMTP_PASS=sua-senha
-SMTP_FROM=noreply@fotow.com
+SMTP_FROM=noreply@snapli.com
 ```
 
 ## 🗄️ Banco de Dados
@@ -341,10 +341,10 @@ exports.downloadAllPhotos = async (req, res) => {
 
 ```bash
 # Backend logs
-tail -f /tmp/fotow-backend.log
+tail -f /tmp/snapli-backend.log
 
 # Logs específicos de downloads
-grep "download" /tmp/fotow-backend.log
+grep "download" /tmp/snapli-backend.log
 ```
 
 ## ✅ Checklist de Deploy
@@ -366,5 +366,5 @@ grep "download" /tmp/fotow-backend.log
 
 Para problemas com downloads:
 
-- Email: suporte@fotow.com
+- Email: suporte@snapli.com
 - Incluir: Token, email do pedido, screenshot do erro

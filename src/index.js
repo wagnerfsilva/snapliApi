@@ -94,7 +94,7 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
     res.json({
         success: true,
-        message: 'Fotow API',
+        message: 'Snapli API',
         version: '1.0.0',
         healthCheck: '/health'
     });

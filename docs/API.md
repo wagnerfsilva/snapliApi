@@ -1,6 +1,6 @@
-# API Documentation - Fotow
+# API Documentation - Snapli
 
-API RESTful para o sistema Fotow de gerenciamento de fotos com reconhecimento facial.
+API RESTful para o sistema Snapli de gerenciamento de fotos com reconhecimento facial.
 
 **Base URL:** `http://localhost:3000/api`
 
@@ -113,7 +113,7 @@ Listar eventos com filtros e paginação.
         "creator": {
           "id": "uuid",
           "name": "Admin",
-          "email": "admin@fotow.com"
+          "email": "admin@snapli.com"
         }
       }
     ],

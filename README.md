@@ -1,6 +1,6 @@
-# Fotow API
+# Snapli API
 
-Backend API para o sistema Fotow - Gerenciamento de fotos de eventos com reconhecimento facial.
+Backend API para o sistema Snapli - Gerenciamento de fotos de eventos com reconhecimento facial.
 
 ## 🏗️ Tecnologias
 
@@ -15,7 +15,7 @@ Backend API para o sistema Fotow - Gerenciamento de fotos de eventos com reconhe
 ## 📋 Estrutura
 
 ```
-fotowApi/
+snapliApi/
 ├── src/
 │   ├── config/          # Configurações (AWS, DB, JWT)
 │   ├── controllers/     # Controladores da API
@@ -35,8 +35,8 @@ fotowApi/
 ### 1. Clone o repositório
 
 ```bash
-git clone https://github.com/wagnerfsilva/fotowApi.git
-cd fotowApi
+git clone https://github.com/wagnerfsilva/snapliApi.git
+cd snapliApi
 ```
 
 ### 2. Instale as dependências

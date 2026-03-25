@@ -1,4 +1,4 @@
-# Fotow Lambda - Image Processing
+# Snapli Lambda - Image Processing
 
 Lambda function que processa imagens automaticamente quando são enviadas para o bucket S3 de originais.
 
@@ -38,9 +38,9 @@ zip -r function.zip .
 
 ```
 AWS_REGION=us-east-1
-WATERMARKED_BUCKET=fotow-watermarked
-REKOGNITION_COLLECTION_ID=fotow-faces
-WATERMARK_TEXT=FOTOW
+WATERMARKED_BUCKET=snapli-watermarked
+REKOGNITION_COLLECTION_ID=snapli-faces
+WATERMARK_TEXT=SNAPLI
 WATERMARK_OPACITY=0.3
 ```
 
@@ -54,8 +54,8 @@ WATERMARK_OPACITY=0.3
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject"],
       "Resource": [
-        "arn:aws:s3:::fotow-originals/*",
-        "arn:aws:s3:::fotow-watermarked/*"
+        "arn:aws:s3:::snapli-originals/*",
+        "arn:aws:s3:::snapli-watermarked/*"
       ]
     },
     {
@@ -78,12 +78,12 @@ WATERMARK_OPACITY=0.3
 
 ### 4. Configurar S3 Trigger
 
-No bucket `fotow-originals`, adicione um evento:
+No bucket `snapli-originals`, adicione um evento:
 
 - Event type: `PUT`, `POST`
 - Prefix: `events/`
 - Suffix: `.jpg`, `.jpeg`, `.png`, `.webp`
-- Destination: Lambda function `fotow-image-processor`
+- Destination: Lambda function `snapli-image-processor`
 
 ### 5. Deploy usando AWS CLI
 
@@ -93,7 +93,7 @@ npm run deploy
 
 # Ou manualmente:
 aws lambda create-function \
-  --function-name fotow-image-processor \
+  --function-name snapli-image-processor \
   --runtime nodejs18.x \
   --role arn:aws:iam::YOUR_ACCOUNT:role/lambda-execution-role \
   --handler index.handler \
@@ -104,7 +104,7 @@ aws lambda create-function \
 
 ## Fluxo de Processamento
 
-1. **Upload**: Admin faz upload da imagem para `s3://fotow-originals/events/{eventId}/originals/`
+1. **Upload**: Admin faz upload da imagem para `s3://snapli-originals/events/{eventId}/originals/`
 2. **Trigger**: S3 aciona a função Lambda
 3. **Download**: Lambda baixa a imagem original
 4. **Processamento**:
@@ -112,7 +112,7 @@ aws lambda create-function \
    - Indexa faces na coleção para busca
    - Cria versão com marca d'água (max 1920px)
    - Gera thumbnail (300x300px)
-5. **Upload**: Envia imagens processadas para `s3://fotow-watermarked/`
+5. **Upload**: Envia imagens processadas para `s3://snapli-watermarked/`
 6. **Conclusão**: Backend atualiza status no banco de dados
 
 ## Monitoramento
@@ -120,7 +120,7 @@ aws lambda create-function \
 Verifique logs no CloudWatch:
 
 ```bash
-aws logs tail /aws/lambda/fotow-image-processor --follow
+aws logs tail /aws/lambda/snapli-image-processor --follow
 ```
 
 ## Testes Locais
@@ -129,7 +129,7 @@ Não é possível testar completamente localmente devido às dependências da AW
 Use o AWS SAM para testes locais:
 
 ```bash
-sam local invoke fotow-image-processor -e test-event.json
+sam local invoke snapli-image-processor -e test-event.json
 ```
 
 ## Troubleshooting

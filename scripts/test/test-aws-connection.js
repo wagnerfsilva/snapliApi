@@ -67,13 +67,13 @@ async function testAWS() {
                 console.log(`   - ${collectionId}`);
             });
             
-            if (rekResponse.CollectionIds.includes('fotow-faces')) {
-                console.log('\n✅ Coleção "fotow-faces" encontrada!');
+            if (rekResponse.CollectionIds.includes('snapli-faces')) {
+                console.log('\n✅ Coleção "snapli-faces" encontrada!');
             } else {
-                console.log('\n⚠️  Coleção "fotow-faces" não encontrada. Você precisará criar a coleção.');
+                console.log('\n⚠️  Coleção "snapli-faces" não encontrada. Você precisará criar a coleção.');
             }
         } else {
-            console.log('\n⚠️  Nenhuma coleção Rekognition encontrada. Você precisará criar a coleção "fotow-faces".');
+            console.log('\n⚠️  Nenhuma coleção Rekognition encontrada. Você precisará criar a coleção "snapli-faces".');
         }
 
         console.log('\n\n✅ Teste de credenciais AWS concluído com sucesso!');

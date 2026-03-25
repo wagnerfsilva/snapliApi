@@ -35,7 +35,7 @@ async function createTestOrder() {
         // Create order
         const order = await Order.create({
             customerName: 'Cliente Teste',
-            customerEmail: 'teste@fotow.com',
+            customerEmail: 'teste@snapli.com',
             status: 'paid',
             totalAmount: event.photos.length * (event.pricePerPhoto || 10),
             paidAt: new Date(),

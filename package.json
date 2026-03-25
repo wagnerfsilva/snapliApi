@@ -1,7 +1,7 @@
 {
-  "name": "fotow-backend",
+  "name": "snapli-backend",
   "version": "1.0.0",
-  "description": "Backend API for Fotow photo management system",
+  "description": "Backend API for Snapli photo management system",
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",

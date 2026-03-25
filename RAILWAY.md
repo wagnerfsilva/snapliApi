@@ -1,6 +1,6 @@
-# Deploy do Fotow API no Railway
+# Deploy do Snapli API no Railway
 
-Este guia explica como fazer o deploy da API do Fotow no Railway.
+Este guia explica como fazer o deploy da API do Snapli no Railway.
 
 ## 📋 Pré-requisitos
 
@@ -16,7 +16,7 @@ Este guia explica como fazer o deploy da API do Fotow no Railway.
 1. Acesse https://railway.app
 2. Clique em "New Project"
 3. Selecione "Deploy from GitHub repo"
-4. Escolha o repositório `wagnerfsilva/fotowApi`
+4. Escolha o repositório `wagnerfsilva/snapliApi`
 
 ### 2. Adicionar PostgreSQL (se necessário)
 
@@ -61,9 +61,9 @@ JWT_EXPIRES_IN=7d
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=sua-access-key
 AWS_SECRET_ACCESS_KEY=sua-secret-key
-S3_BUCKET_ORIGINAL=fotow-originals
-S3_BUCKET_WATERMARKED=fotow-watermarked
-REKOGNITION_COLLECTION_ID=fotow-faces
+S3_BUCKET_ORIGINAL=snapli-originals
+S3_BUCKET_WATERMARKED=snapli-watermarked
+REKOGNITION_COLLECTION_ID=snapli-faces
 REKOGNITION_SIMILARITY_THRESHOLD=80
 ```
 
@@ -75,7 +75,7 @@ API_URL=https://seu-dominio-backend.railway.app
 
 #### Configurações
 ```
-WATERMARK_TEXT=FOTOW
+WATERMARK_TEXT=SNAPLI
 WATERMARK_OPACITY=0.3
 MAX_FILE_SIZE=10485760
 MAX_FILES_PER_UPLOAD=50

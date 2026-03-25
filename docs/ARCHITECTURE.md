@@ -1,4 +1,4 @@
-# Arquitetura do Sistema Fotow
+# Arquitetura do Sistema Snapli
 
 ## 📐 Visão Geral
 
@@ -76,7 +76,7 @@ Admin Interface
          ▼
   ┌──────────────────────┐
   │  S3 Bucket A         │
-  │  fotow-originals/    │
+  │  snapli-originals/    │
   │  events/{id}/        │
   │    originals/        │
   └──────┬───────────────┘
@@ -84,7 +84,7 @@ Admin Interface
          ▼
   ┌───────────────────────┐
   │  Lambda Function      │
-  │  fotow-processor      │
+  │  snapli-processor      │
   ├───────────────────────┤
   │  6. Download image    │
   │  7. Detect faces      │◄──┐
@@ -97,7 +97,7 @@ Admin Interface
          ▼
   ┌──────────────────────┐
   │  S3 Bucket B         │
-  │  fotow-watermarked/  │
+  │  snapli-watermarked/  │
   │  events/{id}/        │
   │    watermarked/      │
   │    thumbnails/       │
@@ -220,10 +220,10 @@ Cliente (sem login)
 
 ## 🪣 Estrutura dos Buckets S3
 
-### Bucket A: fotow-originals (Privado)
+### Bucket A: snapli-originals (Privado)
 
 ```
-fotow-originals/
+snapli-originals/
 └── events/
     └── {event-id}/
         └── originals/
@@ -235,10 +235,10 @@ fotow-originals/
 **Acesso:** Apenas backend via URLs pré-assinadas
 **Uso:** Armazena imagens originais em alta resolução
 
-### Bucket B: fotow-watermarked (Público)
+### Bucket B: snapli-watermarked (Público)
 
 ```
-fotow-watermarked/
+snapli-watermarked/
 └── events/
     └── {event-id}/
         ├── watermarked/

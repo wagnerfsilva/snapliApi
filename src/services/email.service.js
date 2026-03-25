@@ -59,9 +59,9 @@ class EmailService {
             const downloadUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/downloads/${order.downloadToken}`;
 
             const mailOptions = {
-                from: process.env.SMTP_FROM || 'noreply@fotow.com',
+                from: process.env.SMTP_FROM || 'noreply@snapli.com',
                 to: order.customerEmail,
-                subject: '📸 Suas fotos estão prontas para download - Fotow',
+                subject: '📸 Suas fotos estão prontas para download - Snapli',
                 html: `
                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                         <h2 style="color: #2563eb;">Obrigado pela sua compra! 🎉</h2>
@@ -140,9 +140,9 @@ Você pode baixar suas fotos quantas vezes quiser durante este período.
     async sendOrderConfirmation(order, paymentLink) {
         try {
             const mailOptions = {
-                from: process.env.SMTP_FROM || 'noreply@fotow.com',
+                from: process.env.SMTP_FROM || 'noreply@snapli.com',
                 to: order.customerEmail,
-                subject: '🛒 Confirmação de Pedido - Fotow',
+                subject: '🛒 Confirmação de Pedido - Snapli',
                 html: `
                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                         <h2 style="color: #2563eb;">Pedido Recebido! ✅</h2>

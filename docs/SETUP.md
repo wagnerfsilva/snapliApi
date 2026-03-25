@@ -1,6 +1,6 @@
-# Guia de Setup Completo - Fotow
+# Guia de Setup Completo - Snapli
 
-Este guia o levará passo a passo pela configuração completa do sistema Fotow.
+Este guia o levará passo a passo pela configuração completa do sistema Snapli.
 
 ## 📋 Pré-requisitos
 
@@ -73,7 +73,7 @@ npm run seed  # Cria usuário admin padrão
 **Bucket A - Originais (Privado):**
 
 ```bash
-aws s3 mb s3://fotow-originals --region us-east-1
+aws s3 mb s3://snapli-originals --region us-east-1
 ```
 
 Configurar política (privado, apenas backend acessa):
@@ -86,7 +86,7 @@ Configurar política (privado, apenas backend acessa):
       "Effect": "Deny",
       "Principal": "*",
       "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::fotow-originals/*",
+      "Resource": "arn:aws:s3:::snapli-originals/*",
       "Condition": {
         "StringNotEquals": {
           "aws:PrincipalArn": "arn:aws:iam::YOUR_ACCOUNT_ID:user/YOUR_IAM_USER"
@@ -100,7 +100,7 @@ Configurar política (privado, apenas backend acessa):
 **Bucket B - Watermarked (Público para leitura):**
 
 ```bash
-aws s3 mb s3://fotow-watermarked --region us-east-1
+aws s3 mb s3://snapli-watermarked --region us-east-1
 ```
 
 Configurar CORS e política pública:
@@ -114,7 +114,7 @@ Configurar CORS e política pública:
       "Effect": "Allow",
       "Principal": "*",
       "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::fotow-watermarked/*"
+      "Resource": "arn:aws:s3:::snapli-watermarked/*"
     }
   ]
 }
@@ -144,7 +144,7 @@ curl -X POST http://localhost:3000/api/setup/create-collection \
 
 # Ou via AWS CLI
 aws rekognition create-collection \
-  --collection-id fotow-faces \
+  --collection-id snapli-faces \
   --region us-east-1
 ```
 
@@ -156,9 +156,9 @@ Adicione as credenciais AWS no arquivo `backend/.env`:
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=sua-access-key
 AWS_SECRET_ACCESS_KEY=sua-secret-key
-S3_BUCKET_ORIGINAL=fotow-originals
-S3_BUCKET_WATERMARKED=fotow-watermarked
-REKOGNITION_COLLECTION_ID=fotow-faces
+S3_BUCKET_ORIGINAL=snapli-originals
+S3_BUCKET_WATERMARKED=snapli-watermarked
+REKOGNITION_COLLECTION_ID=snapli-faces
 REKOGNITION_SIMILARITY_THRESHOLD=80
 ```
 
@@ -177,7 +177,7 @@ No AWS Console:
 
 1. Vá em Lambda → Create function
 2. Configure:
-   - Nome: `fotow-image-processor`
+   - Nome: `snapli-image-processor`
    - Runtime: Node.js 18.x
    - Architecture: x86_64
    - Memory: 1024 MB
@@ -187,9 +187,9 @@ No AWS Console:
 
 ```
 AWS_REGION=us-east-1
-WATERMARKED_BUCKET=fotow-watermarked
-REKOGNITION_COLLECTION_ID=fotow-faces
-WATERMARK_TEXT=FOTOW
+WATERMARKED_BUCKET=snapli-watermarked
+REKOGNITION_COLLECTION_ID=snapli-faces
+WATERMARK_TEXT=SNAPLI
 WATERMARK_OPACITY=0.3
 ```
 
@@ -204,13 +204,13 @@ WATERMARK_OPACITY=0.3
 cd lambda
 zip -r function.zip .
 aws lambda update-function-code \
-  --function-name fotow-image-processor \
+  --function-name snapli-image-processor \
   --zip-file fileb://function.zip
 ```
 
 ### 3.4 Configurar S3 Trigger
 
-No bucket `fotow-originals`:
+No bucket `snapli-originals`:
 
 1. Properties → Event notifications → Create event notification
 2. Configure:
@@ -218,7 +218,7 @@ No bucket `fotow-originals`:
    - Event types: PUT, POST
    - Prefix: `events/`
    - Suffix: `.jpg,.jpeg,.png,.webp`
-   - Destination: Lambda function `fotow-image-processor`
+   - Destination: Lambda function `snapli-image-processor`
 
 ## 🖥️ 4. Iniciar Backend
 
@@ -294,7 +294,7 @@ sudo apt install nodejs npm postgresql-client
 
 # Clonar repositório
 git clone <repo-url>
-cd fotow/backend
+cd snapli/backend
 
 # Configurar variáveis
 cp .env.example .env
@@ -350,7 +350,7 @@ Lambda já está no cloud, apenas garanta que:
 
 ```bash
 # Ver logs da Lambda
-aws logs tail /aws/lambda/fotow-image-processor --follow
+aws logs tail /aws/lambda/snapli-image-processor --follow
 ```
 
 ### Backend Logs
@@ -409,4 +409,4 @@ Para dúvidas e problemas:
 
 ---
 
-**Parabéns! Seu sistema Fotow está pronto! 🎉**
+**Parabéns! Seu sistema Snapli está pronto! 🎉**

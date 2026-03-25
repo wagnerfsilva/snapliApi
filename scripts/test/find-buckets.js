@@ -12,14 +12,14 @@ const s3Client = new S3Client({
 console.log('🔍 Testando buckets S3 com nomes alternativos...\n');
 
 const possibleNames = [
-    'fotow-originals',
-    'fotow-watermarked',
-    'fotow-original',
-    'fotow-watermark',
-    'fotow-photos-original',
-    'fotow-photos-watermarked',
-    'fotow-app-originals',
-    'fotow-app-watermarked'
+    'snapli-originals',
+    'snapli-watermarked',
+    'snapli-original',
+    'snapli-watermark',
+    'snapli-photos-original',
+    'snapli-photos-watermarked',
+    'snapli-app-originals',
+    'snapli-app-watermarked'
 ];
 
 async function testBuckets() {

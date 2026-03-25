@@ -1,10 +1,10 @@
 {
-  "name": "fotow-lambda",
+  "name": "snapli-lambda",
   "version": "1.0.0",
   "description": "AWS Lambda function for processing uploaded photos",
   "main": "index.js",
   "scripts": {
-    "deploy": "zip -r function.zip . && aws lambda update-function-code --function-name fotow-image-processor --zip-file fileb://function.zip"
+    "deploy": "zip -r function.zip . && aws lambda update-function-code --function-name snapli-image-processor --zip-file fileb://function.zip"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.478.0",

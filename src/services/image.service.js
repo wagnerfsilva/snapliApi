@@ -45,7 +45,7 @@ class ImageService {
      */
     async applyWatermark(buffer, watermarkText = null) {
         try {
-            const text = watermarkText || process.env.WATERMARK_TEXT || 'FOTOW';
+            const text = watermarkText || process.env.WATERMARK_TEXT || 'SNAPLI';
             const opacity = parseFloat(process.env.WATERMARK_OPACITY) || 0.4;
 
             // Step 1: Resize image first

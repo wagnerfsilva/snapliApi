@@ -11,10 +11,10 @@
         "s3:ListBucket"
       ],
       "Resource": [
-        "arn:aws:s3:::fotow-original-photos",
-        "arn:aws:s3:::fotow-original-photos/*",
-        "arn:aws:s3:::fotow-watermarked-photos",
-        "arn:aws:s3:::fotow-watermarked-photos/*"
+        "arn:aws:s3:::snapli-original-photos",
+        "arn:aws:s3:::snapli-original-photos/*",
+        "arn:aws:s3:::snapli-watermarked-photos",
+        "arn:aws:s3:::snapli-watermarked-photos/*"
       ]
     },
     {

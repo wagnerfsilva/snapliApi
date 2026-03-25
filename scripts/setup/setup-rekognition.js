@@ -13,7 +13,7 @@ const rekognitionClient = new RekognitionClient({
     }
 });
 
-const COLLECTION_ID = process.env.REKOGNITION_COLLECTION_ID || 'fotow-faces';
+const COLLECTION_ID = process.env.REKOGNITION_COLLECTION_ID || 'snapli-faces';
 
 async function setupRekognition() {
     try {

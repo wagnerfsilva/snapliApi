@@ -5,7 +5,7 @@ const path = require('path');
 async function testWatermark() {
   const imageService = require('../../src/services/image.service');
   const dir = '/Users/pulpa/Downloads';
-  const outDir = '/tmp/fotow-wm-test';
+  const outDir = '/tmp/snapli-wm-test';
 
   fs.mkdirSync(outDir, { recursive: true });
 

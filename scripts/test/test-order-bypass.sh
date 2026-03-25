@@ -6,7 +6,7 @@ echo "🧪 Testando criação de pedido com bypass de pagamento..."
 echo ""
 
 # Get first 2 photos from database
-PHOTO_IDS=$(psql -d fotow_db -t -c "SELECT id FROM photos WHERE processing_status = 'completed' LIMIT 2;" 2>/dev/null | tr '\n' ' ')
+PHOTO_IDS=$(psql -d snapli_db -t -c "SELECT id FROM photos WHERE processing_status = 'completed' LIMIT 2;" 2>/dev/null | tr '\n' ' ')
 
 if [ -z "$PHOTO_IDS" ]; then
     echo "❌ Nenhuma foto encontrada no banco"
@@ -32,7 +32,7 @@ RESPONSE=$(curl -s -X POST http://localhost:3000/api/orders \
   -H "Content-Type: application/json" \
   -d "{
     \"customerName\": \"Teste Cliente\",
-    \"customerEmail\": \"teste@fotow.com\",
+    \"customerEmail\": \"teste@snapli.com\",
     \"items\": [
       {\"photoId\": \"$PHOTO_1\"},
       {\"photoId\": \"$PHOTO_2\"}

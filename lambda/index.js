@@ -110,7 +110,7 @@ exports.handler = async (event) => {
 async function createWatermarkedImage(imageBuffer, metadata) {
     const fontSize = Math.floor(metadata.width / 15);
     const textHeight = fontSize * 1.5;
-    const watermarkText = process.env.WATERMARK_TEXT || 'FOTOW';
+    const watermarkText = process.env.WATERMARK_TEXT || 'SNAPLI';
     const opacity = parseFloat(process.env.WATERMARK_OPACITY) || 0.3;
 
     const svgWatermark = `

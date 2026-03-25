@@ -43,7 +43,7 @@ async function simulateFullFlow() {
         // Step 2: Cria pedido (status: pending)
         console.log('🛒 PASSO 2: Cliente finaliza compra\n');
 
-        const customerEmail = `cliente${Date.now()}@fotow.com`;
+        const customerEmail = `cliente${Date.now()}@snapli.com`;
         const order = await Order.create({
             customerName: 'João Silva',
             customerEmail: customerEmail,

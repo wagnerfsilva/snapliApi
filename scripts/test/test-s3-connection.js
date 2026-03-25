@@ -39,7 +39,7 @@ async function testBucketAccess(bucketName, bucketType) {
         const putCommand = new PutObjectCommand({
             Bucket: bucketName,
             Key: testKey,
-            Body: Buffer.from('Test file from Fotow'),
+            Body: Buffer.from('Test file from Snapli'),
             ContentType: 'text/plain'
         });
         await s3Client.send(putCommand);
@@ -64,7 +64,7 @@ async function testBucketAccess(bucketName, bucketType) {
 
 async function testConnection() {
     console.log(`${colors.blue}═══════════════════════════════════════════${colors.reset}`);
-    console.log(`${colors.blue}  Teste de Conexão AWS S3 - Fotow${colors.reset}`);
+    console.log(`${colors.blue}  Teste de Conexão AWS S3 - Snapli${colors.reset}`);
     console.log(`${colors.blue}═══════════════════════════════════════════${colors.reset}`);
 
     // Verifica variáveis de ambiente

@@ -93,7 +93,7 @@ const createPixPayment = async ({ customerName, customerEmail, amount, orderId, 
                 id: `sim_${orderId}`,
                 invoiceUrl: `https://sandbox.asaas.com/i/sim_${orderId}`,
                 pixQrCode: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
-                pixCopyPaste: '00020126580014br.gov.bcb.pix0136simulation-pix-code-here5204000053039865802BR5913FOTOW6009SAO PAULO62070503***6304XXXX',
+                pixCopyPaste: '00020126580014br.gov.bcb.pix0136simulation-pix-code-here5204000053039865802BR5913SNAPLI6009SAO PAULO62070503***6304XXXX',
                 status: 'PENDING',
                 dueDate: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
                 expirationDate: new Date(Date.now() + 30 * 60 * 1000).toISOString()
@@ -120,7 +120,7 @@ const createPixPayment = async ({ customerName, customerEmail, amount, orderId, 
             billingType: 'PIX',
             value: amount,
             dueDate,
-            description: description || `Pedido #${orderId} - Fotos Fotow`,
+            description: description || `Pedido #${orderId} - Fotos Snapli`,
             externalReference: orderId,
             postalService: false
         });
