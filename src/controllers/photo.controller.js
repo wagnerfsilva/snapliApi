@@ -1,4 +1,4 @@
-const { Photo, Event } = require('../models');
+const { Photo, Event, OrderItem } = require('../models');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
 const path = require('path');
@@ -267,6 +267,15 @@ class PhotoController {
                 return res.status(404).json({
                     success: false,
                     message: 'Foto não encontrada'
+                });
+            }
+
+            // Check if photo has been sold
+            const salesCount = await OrderItem.count({ where: { photoId: id } });
+            if (salesCount > 0) {
+                return res.status(409).json({
+                    success: false,
+                    message: `Esta foto não pode ser excluída pois possui ${salesCount} venda(s) associada(s)`
                 });
             }
 

@@ -11,15 +11,21 @@
         "s3:ListBucket"
       ],
       "Resource": [
-        "arn:aws:s3:::snapli-original-photos",
-        "arn:aws:s3:::snapli-original-photos/*",
-        "arn:aws:s3:::snapli-watermarked-photos",
-        "arn:aws:s3:::snapli-watermarked-photos/*"
+        "arn:aws:s3:::snapli-originals",
+        "arn:aws:s3:::snapli-originals/*",
+        "arn:aws:s3:::snapli-watermarked",
+        "arn:aws:s3:::snapli-watermarked/*"
       ]
     },
     {
       "Effect": "Allow",
-      "Action": ["rekognition:*"],
+      "Action": [
+        "rekognition:CreateCollection",
+        "rekognition:DescribeCollection",
+        "rekognition:DetectFaces",
+        "rekognition:IndexFaces",
+        "rekognition:SearchFacesByImage"
+      ],
       "Resource": "*"
     }
   ]
