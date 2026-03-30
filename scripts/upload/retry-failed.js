@@ -64,8 +64,8 @@ async function fetchFailedPhotos(token) {
     
     const allFailed = [];
     
-    // Buscar fotos com status 'failed' e 'processing' (travadas)
-    for (const status of ['failed', 'processing']) {
+    // Buscar fotos com status 'failed', 'processing' e 'pending' (travadas)
+    for (const status of ['failed', 'processing', 'pending']) {
         let page = 1;
         const limit = 100;
     

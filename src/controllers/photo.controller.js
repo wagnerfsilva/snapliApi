@@ -459,7 +459,7 @@ class PhotoController {
                 });
             }
 
-            if (!['failed', 'processing'].includes(photo.processingStatus)) {
+            if (!['failed', 'processing', 'pending'].includes(photo.processingStatus)) {
                 return res.status(400).json({
                     success: false,
                     message: 'Foto não está com status de falha ou travada'
