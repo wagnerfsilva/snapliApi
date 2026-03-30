@@ -57,38 +57,42 @@ async function authenticate() {
 }
 
 // ============================================================
-// BUSCAR FOTOS COM ERRO
+// BUSCAR FOTOS COM ERRO OU TRAVADAS
 // ============================================================
 async function fetchFailedPhotos(token) {
-    console.log('\n📂 Buscando fotos com erro...');
+    console.log('\n📂 Buscando fotos com erro ou travadas...');
     
     const allFailed = [];
-    let page = 1;
-    const limit = 100;
     
-    while (true) {
-        const url = `${CONFIG.API_URL}/photos/event/${CONFIG.EVENT_ID}?processingStatus=failed&page=${page}&limit=${limit}`;
+    // Buscar fotos com status 'failed' e 'processing' (travadas)
+    for (const status of ['failed', 'processing']) {
+        let page = 1;
+        const limit = 100;
+    
+        while (true) {
+            const url = `${CONFIG.API_URL}/photos/event/${CONFIG.EVENT_ID}?processingStatus=${status}&page=${page}&limit=${limit}`;
         
-        const response = await fetch(url, {
-            headers: { 'Authorization': `Bearer ${token}` },
-        });
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
 
-        const data = await response.json();
+            const data = await response.json();
         
-        if (!response.ok) {
-            throw new Error(`Erro ao buscar fotos: ${data.message || response.statusText}`);
+            if (!response.ok) {
+                throw new Error(`Erro ao buscar fotos: ${data.message || response.statusText}`);
+            }
+
+            const photos = data.data?.photos || data.data || [];
+        
+            if (photos.length === 0) break;
+        
+            allFailed.push(...photos);
+        
+            // Se retornou menos que o limit, não há mais páginas
+            if (photos.length < limit) break;
+        
+            page++;
         }
-
-        const photos = data.data?.photos || data.data || [];
-        
-        if (photos.length === 0) break;
-        
-        allFailed.push(...photos);
-        
-        // Se retornou menos que o limit, não há mais páginas
-        if (photos.length < limit) break;
-        
-        page++;
     }
 
     return allFailed;
