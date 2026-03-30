@@ -27,7 +27,7 @@ exports.createOrder = async (req, res) => {
             include: [{
                 model: Event,
                 as: 'event',
-                attributes: ['id', 'name', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice']
+                attributes: ['id', 'name', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'photoCount']
             }]
         });
 
@@ -45,41 +45,65 @@ exports.createOrder = async (req, res) => {
 
         const event = photos[0].event;
 
-        // Calculate price based on event pricing
+        // Calculate price based on event pricing (mirrors frontend cartStore.calculateBestPrice)
         const itemCount = items.length;
-        let appliedPrice = event.pricePerPhoto || 10; // Default price
+        const pricePerPhoto = parseFloat(event.pricePerPhoto) || 10;
+        const pricingPackages = event.pricingPackages;
+        const allPhotosPrice = event.allPhotosPrice ? parseFloat(event.allPhotosPrice) : null;
 
         logger.info(`Calculando preço para ${itemCount} fotos`, {
             eventId: event.id,
             eventName: event.name,
-            pricePerPhoto: event.pricePerPhoto,
-            pricingPackages: event.pricingPackages,
-            allPhotosPrice: event.allPhotosPrice,
+            pricePerPhoto,
+            pricingPackages,
+            allPhotosPrice,
             photoCount: event.photoCount
         });
 
-        // Check for package discounts
-        if (event.pricingPackages && Array.isArray(event.pricingPackages)) {
-            const packages = event.pricingPackages
-                .filter(pkg => itemCount >= pkg.quantity)
-                .sort((a, b) => b.quantity - a.quantity);
+        const priceOptions = [];
 
-            if (packages.length > 0) {
-                appliedPrice = packages[0].price / packages[0].quantity;
-                logger.info(`Aplicando preço de pacote: R$ ${appliedPrice}`, {
-                    packageUsed: packages[0]
-                });
+        // Option 1: Individual price
+        const individualTotal = itemCount * pricePerPhoto;
+        priceOptions.push({ type: 'individual', price: individualTotal });
+
+        // Option 2: Package pricing (greedy bin-packing, same as frontend)
+        if (pricingPackages && Array.isArray(pricingPackages) && pricingPackages.length > 0) {
+            const sortedPackages = [...pricingPackages].sort((a, b) => b.quantity - a.quantity);
+            let remaining = itemCount;
+            let packagePrice = 0;
+
+            for (const pkg of sortedPackages) {
+                while (remaining >= pkg.quantity) {
+                    packagePrice += parseFloat(pkg.price);
+                    remaining -= pkg.quantity;
+                }
             }
+
+            if (remaining > 0) {
+                packagePrice += remaining * pricePerPhoto;
+            }
+
+            priceOptions.push({ type: 'package', price: packagePrice });
         }
 
-        // Check for "all photos" discount
-        if (event.allPhotosPrice && event.photoCount && itemCount >= event.photoCount) {
-            totalAmount = event.allPhotosPrice;
-            logger.info(`Aplicando preço de todas as fotos: R$ ${totalAmount}`);
-        } else {
-            totalAmount = itemCount * appliedPrice;
-            logger.info(`Preço calculado: ${itemCount} × R$ ${appliedPrice} = R$ ${totalAmount}`);
+        // Option 3: All photos price (acts as price ceiling)
+        if (allPhotosPrice) {
+            priceOptions.push({ type: 'all', price: allPhotosPrice });
         }
+
+        // Pick the lowest price
+        const bestOption = priceOptions.reduce((best, current) =>
+            current.price < best.price ? current : best
+        );
+        totalAmount = bestOption.price;
+        const appliedPrice = totalAmount / itemCount;
+
+        logger.info(`Opções de preço calculadas`, {
+            options: priceOptions,
+            bestOption: bestOption.type,
+            totalAmount,
+            appliedPricePerItem: appliedPrice
+        });
 
         // Create order
         const orderData = {
