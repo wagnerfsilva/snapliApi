@@ -1,0 +1,10 @@
+{
+  "name": "snapli-batch-upload",
+  "version": "1.0.0",
+  "description": "Script para upload em lote de fotos para eventos Snapli",
+  "private": true,
+  "dependencies": {
+    "form-data": "^4.0.0",
+    "node-fetch": "^2.7.0"
+  }
+}

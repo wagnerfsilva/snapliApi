@@ -41,6 +41,38 @@ class ImageService {
     }
 
     /**
+     * Resize image to fit within AWS Rekognition 5MB limit
+     */
+    async resizeForRekognition(buffer, maxBytes = 4.5 * 1024 * 1024) {
+        try {
+            const metadata = await sharp(buffer).metadata();
+            let quality = 85;
+            let scale = 1;
+            let result = buffer;
+
+            // Reduce progressively until under limit
+            while (result.length > maxBytes && (quality > 30 || scale > 0.3)) {
+                if (quality > 40) {
+                    quality -= 10;
+                } else {
+                    scale -= 0.1;
+                }
+
+                const newWidth = Math.round(metadata.width * scale);
+                result = await sharp(buffer)
+                    .resize(newWidth, null, { fit: 'inside' })
+                    .jpeg({ quality })
+                    .toBuffer();
+            }
+
+            return result;
+        } catch (error) {
+            logger.error('Erro ao redimensionar para Rekognition:', error);
+            throw new Error(`Erro ao redimensionar imagem: ${error.message}`);
+        }
+    }
+
+    /**
      * Apply watermark to image
      */
     async applyWatermark(buffer, watermarkText = null) {

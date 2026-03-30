@@ -138,8 +138,15 @@ class PhotoController {
 
             await photo.update({ processingStatus: 'processing' });
 
+            // Resize image if larger than 5MB (AWS Rekognition limit)
+            let processBuffer = imageBuffer;
+            if (imageBuffer.length > 5 * 1024 * 1024) {
+                processBuffer = await imageService.resizeForRekognition(imageBuffer);
+                logger.info(`Imagem redimensionada para Rekognition: ${photoId} (${imageBuffer.length} -> ${processBuffer.length} bytes)`);
+            }
+
             // Process with Rekognition
-            const faceResult = await rekognitionService.processPhoto(imageBuffer, photoId);
+            const faceResult = await rekognitionService.processPhoto(processBuffer, photoId);
 
             await photo.update({
                 faceData: faceResult.faces || [],
@@ -468,7 +475,7 @@ class PhotoController {
                 processingError: null
             });
 
-            this.processFacialRecognition(photo.id, imageBuffer).catch(err => {
+            PhotoController.processFacialRecognition(photo.id, imageBuffer).catch(err => {
                 logger.error(`Erro ao reprocessar foto ${photo.id}:`, err);
             });
 
