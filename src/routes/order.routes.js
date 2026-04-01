@@ -29,6 +29,12 @@ router.post('/webhook/asaas', orderController.asaasWebhook);
 // List all orders
 router.get('/', authenticate, orderController.listOrders);
 
+// List orders by event
+router.get('/event/:eventId', authenticate, orderController.listOrdersByEvent);
+
+// Sync order with Asaas
+router.post('/:orderId/sync-asaas', authenticate, orderController.syncOrderWithAsaas);
+
 /**
  * DEV MODE ONLY
  */

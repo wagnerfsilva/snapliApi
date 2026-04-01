@@ -611,3 +611,129 @@ exports.simulatePayment = async (req, res) => {
         res.status(500).json({ error: 'Erro ao simular pagamento' });
     }
 };
+
+/**
+ * List orders by event (admin)
+ */
+exports.listOrdersByEvent = async (req, res) => {
+    try {
+        const { eventId } = req.params;
+
+        const orders = await Order.findAll({
+            include: [{
+                model: OrderItem,
+                as: 'items',
+                required: true,
+                include: [{
+                    model: Photo,
+                    as: 'photo',
+                    where: { eventId },
+                    required: true,
+                    attributes: ['id', 'eventId']
+                }]
+            }],
+            order: [['createdAt', 'DESC']]
+        });
+
+        const frontendUrl = process.env.FRONTEND_URL || 'https://web.snapli.com.br';
+
+        res.json({
+            success: true,
+            orders: orders.map(order => ({
+                id: order.id,
+                customerName: order.customerName,
+                customerEmail: order.customerEmail,
+                status: order.status,
+                totalAmount: order.totalAmount,
+                photoCount: order.items.length,
+                paidAt: order.paidAt,
+                downloadToken: order.downloadToken,
+                downloadUrl: order.downloadToken
+                    ? `${frontendUrl}/downloads/${order.downloadToken}`
+                    : null,
+                downloadExpiresAt: order.downloadExpiresAt,
+                paymentId: order.paymentId,
+                createdAt: order.createdAt
+            })),
+            total: orders.length
+        });
+
+    } catch (error) {
+        logger.error('Erro ao listar pedidos do evento:', error);
+        res.status(500).json({ error: 'Erro ao listar pedidos do evento' });
+    }
+};
+
+/**
+ * Sync order payment status with Asaas (admin)
+ */
+exports.syncOrderWithAsaas = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+
+        const order = await Order.findByPk(orderId);
+
+        if (!order) {
+            return res.status(404).json({ error: 'Pedido não encontrado' });
+        }
+
+        if (!order.paymentId) {
+            return res.status(400).json({ error: 'Pedido sem ID de pagamento no Asaas' });
+        }
+
+        // Query Asaas
+        const asaasPayment = await pixService.validatePixPayment(order.paymentId);
+
+        const changes = [];
+        const frontendUrl = process.env.FRONTEND_URL || 'https://web.snapli.com.br';
+
+        // Check if paid in Asaas but not in system
+        if (asaasPayment.paid && order.status !== 'paid' && order.status !== 'completed') {
+            order.status = 'paid';
+            order.paidAt = asaasPayment.paidAt || new Date();
+
+            if (!order.downloadToken) {
+                order.downloadToken = crypto.randomBytes(32).toString('hex');
+            }
+            if (!order.downloadExpiresAt) {
+                order.downloadExpiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+            }
+
+            await order.save();
+            changes.push('Status atualizado para pago');
+
+            // Send download email
+            try {
+                await emailService.sendDownloadEmail(order);
+                changes.push('Email de download enviado');
+            } catch (emailError) {
+                logger.error('Erro ao enviar email após sync:', emailError);
+            }
+        }
+
+        res.json({
+            success: true,
+            order: {
+                id: order.id,
+                customerName: order.customerName,
+                customerEmail: order.customerEmail,
+                status: order.status,
+                totalAmount: order.totalAmount,
+                paidAt: order.paidAt,
+                downloadToken: order.downloadToken,
+                downloadUrl: order.downloadToken
+                    ? `${frontendUrl}/downloads/${order.downloadToken}`
+                    : null,
+                downloadExpiresAt: order.downloadExpiresAt,
+                paymentId: order.paymentId
+            },
+            asaasStatus: asaasPayment.status,
+            changes,
+            synced: changes.length > 0
+        });
+
+    } catch (error) {
+        logger.error('Erro ao sincronizar com Asaas:', error);
+        res.status(500).json({ error: 'Erro ao sincronizar com Asaas' });
+    }
+};
