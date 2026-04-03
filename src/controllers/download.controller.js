@@ -1,5 +1,6 @@
 const { Order, OrderItem, Photo, Event } = require('../models');
 const s3Service = require('../services/s3.service');
+const emailService = require('../services/email.service');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 
@@ -250,8 +251,7 @@ exports.resendDownloadEmail = async (req, res) => {
             return res.status(400).json({ error: 'Pedido ainda não foi pago' });
         }
 
-        // TODO: Implement email service
-        // await emailService.sendDownloadEmail(order);
+        await emailService.sendDownloadEmail(order);
 
         res.json({
             message: 'Email reenviado com sucesso',
