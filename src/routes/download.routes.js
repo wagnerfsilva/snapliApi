@@ -26,4 +26,7 @@ router.post('/generate/:orderId', authenticate, downloadController.generateDownl
 // Resend download email
 router.post('/resend/:orderId', authenticate, downloadController.resendDownloadEmail);
 
+// TEST: Endpoint temporário para validar email em produção (remover depois)
+router.get('/test-email/:orderId', downloadController.resendDownloadEmail);
+
 module.exports = router;
