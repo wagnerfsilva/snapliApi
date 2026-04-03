@@ -1,19 +1,8 @@
 const nodemailer = require('nodemailer');
-const sharp = require('sharp');
 const logger = require('../utils/logger');
 
-// SVG do logo Snapli (idêntico ao snapliSite)
-const LOGO_SVG = `<svg width="128" height="128" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="64" height="64" rx="16" fill="#C8FF00" />
-  <circle cx="32" cy="32" r="18" stroke="#09090B" stroke-width="2.8" fill="none" />
-  <circle cx="32" cy="32" r="9" stroke="#09090B" stroke-width="2.8" fill="none" />
-  <line x1="32" y1="14" x2="32" y2="23" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
-  <line x1="47.6" y1="23" x2="39.8" y2="27.5" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
-  <line x1="47.6" y1="41" x2="39.8" y2="36.5" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
-  <line x1="32" y1="50" x2="32" y2="41" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
-  <line x1="16.4" y1="41" x2="24.2" y2="36.5" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
-  <line x1="16.4" y1="23" x2="24.2" y2="27.5" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
-</svg>`;
+// Logo Snapli 64x64 PNG pré-gerado (idêntico ao SVG do snapliSite)
+const LOGO_PNG_BASE64 = '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';
 
 class EmailService {
     constructor() {
@@ -21,20 +10,6 @@ class EmailService {
         // For development, use ethereal.email or console
         // For production, configure with real SMTP
         this.transporter = this.createTransporter();
-        this._logoPngBuffer = null;
-    }
-
-    /**
-     * Gera o PNG do logo a partir do SVG (cache em memória)
-     */
-    async getLogoPng() {
-        if (!this._logoPngBuffer) {
-            this._logoPngBuffer = await sharp(Buffer.from(LOGO_SVG))
-                .resize(64, 64)
-                .png()
-                .toBuffer();
-        }
-        return this._logoPngBuffer;
     }
 
     createTransporter() {
@@ -87,7 +62,6 @@ class EmailService {
             const downloadUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/downloads/${order.downloadToken}`;
             const photoCount = order.items?.length || 0;
             const expiresDate = new Date(order.downloadExpiresAt).toLocaleDateString('pt-BR');
-            const logoPng = await this.getLogoPng();
 
             const mailOptions = {
                 from: process.env.SMTP_FROM || 'Snapli <noreply@snapli.com.br>',
@@ -95,7 +69,7 @@ class EmailService {
                 subject: 'Pagamento Confirmado',
                 attachments: [{
                     filename: 'logo.png',
-                    content: logoPng,
+                    content: Buffer.from(LOGO_PNG_BASE64, 'base64'),
                     cid: 'snapli-logo'
                 }],
                 html: `
