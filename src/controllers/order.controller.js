@@ -346,8 +346,15 @@ exports.validatePayment = async (req, res) => {
                 order.downloadExpiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
                 await order.save();
 
-                // Envia email com link de download
-                await emailService.sendDownloadEmail(order);
+                // Envia email com link de download (não bloqueia confirmação)
+                try {
+                    await emailService.sendDownloadEmail(order);
+                } catch (emailError) {
+                    logger.error('Falha ao enviar email de download (pagamento já confirmado)', {
+                        orderId: order.id,
+                        error: emailError.message
+                    });
+                }
 
                 logger.info('Pagamento confirmado', {
                     orderId: order.id,
@@ -482,8 +489,15 @@ exports.asaasWebhook = async (req, res) => {
                 order.downloadExpiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
                 await order.save();
 
-                // Envia email com link de download
-                await emailService.sendDownloadEmail(order);
+                // Envia email com link de download (não bloqueia webhook)
+                try {
+                    await emailService.sendDownloadEmail(order);
+                } catch (emailError) {
+                    logger.error('Falha ao enviar email de download via webhook', {
+                        orderId: order.id,
+                        error: emailError.message
+                    });
+                }
 
                 logger.info('Pedido atualizado via webhook', {
                     orderId: order.id,
@@ -535,7 +549,14 @@ exports.confirmPaymentManually = async (req, res) => {
         order.downloadExpiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
         await order.save();
 
-        await emailService.sendDownloadEmail(order);
+        try {
+            await emailService.sendDownloadEmail(order);
+        } catch (emailError) {
+            logger.error('Falha ao enviar email de download (confirmação manual)', {
+                orderId: order.id,
+                error: emailError.message
+            });
+        }
 
         logger.info('Pagamento confirmado manualmente (DEV)', {
             orderId: order.id
@@ -591,7 +612,14 @@ exports.simulatePayment = async (req, res) => {
         await order.save();
 
         // Send download email
-        await emailService.sendDownloadEmail(order);
+        try {
+            await emailService.sendDownloadEmail(order);
+        } catch (emailError) {
+            logger.error('Falha ao enviar email de download (simulação)', {
+                orderId: order.id,
+                error: emailError.message
+            });
+        }
 
         logger.info(`Pagamento simulado: ${order.id}`);
 
