@@ -260,6 +260,6 @@ exports.resendDownloadEmail = async (req, res) => {
 
     } catch (error) {
         logger.error('Erro ao reenviar email:', error);
-        res.status(500).json({ error: 'Erro ao reenviar email' });
+        res.status(500).json({ error: 'Erro ao reenviar email', detail: error.message });
     }
 };
