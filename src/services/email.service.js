@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
+const { SESClient } = require('@aws-sdk/client-ses');
 
 // Logo Snapli 64x64 PNG pré-gerado (idêntico ao SVG do snapliSite)
 const LOGO_PNG_BASE64 = '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';
@@ -40,6 +41,21 @@ class EmailService {
                     return { messageId: 'no-smtp-' + Date.now() };
                 }
             };
+        }
+
+        // Production mode with AWS SES - uses HTTPS (port 443), unblocked by cloud providers
+        if (process.env.EMAIL_PROVIDER === 'ses') {
+            logger.info('Email transport: AWS SES');
+            const sesClient = new SESClient({
+                region: process.env.AWS_REGION || 'us-east-1',
+                credentials: process.env.AWS_ACCESS_KEY_ID ? {
+                    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+                    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+                } : undefined
+            });
+            return nodemailer.createTransport({
+                SES: { ses: sesClient, aws: require('@aws-sdk/client-ses') }
+            });
         }
 
         // Production mode with SMTP configured - use real SMTP
