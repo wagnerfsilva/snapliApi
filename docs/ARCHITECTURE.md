@@ -72,7 +72,7 @@ Admin Interface
   │   Backend    │─────► 3. Save to DB (status: pending)
   │   API        │
   └──────┬───────┘
-         │ 4. Upload to S3 Bucket A (originals/)
+         │ 4. Upload original to S3 Bucket A
          ▼
   ┌──────────────────────┐
   │  S3 Bucket A         │
@@ -80,27 +80,28 @@ Admin Interface
   │  events/{id}/        │
   │    originals/        │
   └──────┬───────────────┘
-         │ 5. S3 Event Trigger
+         │ 5. S3 Event Trigger (automático)
          ▼
-  ┌───────────────────────┐
-  │  Lambda Function      │
-  │  snapli-processor      │
-  ├───────────────────────┤
-  │  6. Download image    │
-  │  7. Detect faces      │◄──┐
-  │  8. Index faces       │   │ 8a. AWS Rekognition
-  │  9. Apply watermark   │   │     DetectFaces
-  │ 10. Create thumbnail  │   │     IndexFaces
-  │ 11. Upload processed  │───┘
-  └──────┬────────────────┘
-         │ 12. Upload to Bucket B
+  ┌───────────────────────────┐
+  │  Lambda                   │
+  │  snapli-image-processor   │
+  ├───────────────────────────┤
+  │  6. Download original     │
+  │  7. Apply watermark (SVG) │
+  │  8. Upload watermarked    │──► S3 Bucket B
+  │  9. Detect faces          │◄──┐
+  │ 10. Index faces           │   │ AWS Rekognition
+  │ 11. POST /lambda-callback │───┘ (x-lambda-secret)
+  └──────┬────────────────────┘
+         │ 12. API atualiza DB
+         │     processingStatus: completed
+         │     watermarkedKey, faceCount, rekognitionFaceId
          ▼
   ┌──────────────────────┐
   │  S3 Bucket B         │
   │  snapli-watermarked/  │
   │  events/{id}/        │
   │    watermarked/      │
-  │    thumbnails/       │
   └──────────────────────┘
 ```
 
@@ -191,8 +192,7 @@ Cliente (sem login)
 │ id (PK)             │
 │ eventId (FK)        │
 │ originalKey         │──► S3 Bucket A
-│ watermarkedKey      │──► S3 Bucket B
-│ thumbnailKey        │──► S3 Bucket B
+│ watermarkedKey      │──► S3 Bucket B (set by Lambda)
 │ width, height       │
 │ fileSize            │
 │ faceData (JSONB)    │
@@ -241,18 +241,14 @@ snapli-originals/
 snapli-watermarked/
 └── events/
     └── {event-id}/
-        ├── watermarked/
-        │   ├── {uuid-1}.jpg  (max 1920px, com marca d'água)
-        │   ├── {uuid-2}.jpg
-        │   └── {uuid-3}.jpg
-        └── thumbnails/
-            ├── {uuid-1}.jpg  (300x300px)
+        └── watermarked/
+            ├── {uuid-1}.jpg  (com marca d'água, gerada pela Lambda)
             ├── {uuid-2}.jpg
             └── {uuid-3}.jpg
 ```
 
 **Acesso:** Público (CORS habilitado)
-**Uso:** Servir previews com marca d'água e thumbnails
+**Uso:** Servir previews com marca d'água (sem thumbnails — removidos)
 
 ## 🔐 Camadas de Segurança
 

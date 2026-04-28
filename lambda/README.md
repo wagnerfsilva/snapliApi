@@ -2,49 +2,53 @@
 
 Lambda function que processa imagens automaticamente quando são enviadas para o bucket S3 de originais.
 
+> **Status**: Em produção desde 28/04/2026. Fluxo 100% assíncrono e validado.
+
 ## Funcionalidades
 
+- **Marca d'água** (watermark SVG 4 camadas) na imagem
 - **Detecção de faces** usando AWS Rekognition
 - **Indexação de faces** na coleção do Rekognition para busca futura
-- **Criação de versão com marca d'água** para preview
-- **Geração de thumbnails** para melhor performance
-- **Upload automático** para bucket de imagens processadas
+- **Callback HTTP** para API Railway para atualizar o banco de dados
 
-## Deployment
+> Thumbnails foram removidos (abril 2026) — apenas `watermarked/` é gerado.
 
-### 1. Instalar dependências
+## Deploy (atualizar Lambda existente)
 
 ```bash
-npm install
+# 1. Instalar sharp para Linux (rodar uma vez ou se mudar versão)
+npm install --os=linux --cpu=x64 --libc=glibc sharp
+
+# 2. Rebuild zip
+rm -f function.zip && zip -r function.zip index.js package.json node_modules/
+
+# 3. Deploy via script
+cd .. && node scripts/setup/update-lambda.js
 ```
 
-### 2. Criar arquivo zip
-
-```bash
-zip -r function.zip .
-```
-
-### 3. Criar função Lambda no AWS Console
+## Configuração da Lambda no AWS Console
 
 **Configurações básicas:**
 
+- Nome: `snapli-image-processor`
 - Runtime: Node.js 18.x
 - Architecture: x86_64
 - Memory: 1024 MB
-- Timeout: 5 minutes
-- Ephemeral storage: 1024 MB
+- Timeout: 5 minutos
+- IAM Role: `snapli-lambda-execution-role`
 
 **Variáveis de ambiente:**
 
 ```
-AWS_REGION=us-east-1
 WATERMARKED_BUCKET=snapli-watermarked
 REKOGNITION_COLLECTION_ID=snapli-faces
-WATERMARK_TEXT=SNAPLI
-WATERMARK_OPACITY=0.3
+API_CALLBACK_URL=https://snapliapi-production.up.railway.app/api/photos/lambda-callback
+LAMBDA_INTERNAL_SECRET=<valor do .env>
 ```
 
-**Permissões IAM necessárias:**
+> ⚠️ NÃO setar `AWS_REGION` — é reservado pelo Lambda runtime e causa erro.
+
+**Permissões IAM necessárias (role `snapli-lambda-execution-role`):**
 
 ```json
 {
@@ -76,80 +80,57 @@ WATERMARK_OPACITY=0.3
 }
 ```
 
-### 4. Configurar S3 Trigger
+### Configurar S3 Trigger
 
-No bucket `snapli-originals`, adicione um evento:
+No bucket `snapli-originals`, evento configurado:
 
-- Event type: `PUT`, `POST`
+- Event type: `PUT`
 - Prefix: `events/`
-- Suffix: `.jpg`, `.jpeg`, `.png`, `.webp`
+- Suffix: `.jpg`, `.jpeg`, `.png`
 - Destination: Lambda function `snapli-image-processor`
-
-### 5. Deploy usando AWS CLI
-
-```bash
-# Upload do código
-npm run deploy
-
-# Ou manualmente:
-aws lambda create-function \
-  --function-name snapli-image-processor \
-  --runtime nodejs18.x \
-  --role arn:aws:iam::YOUR_ACCOUNT:role/lambda-execution-role \
-  --handler index.handler \
-  --zip-file fileb://function.zip \
-  --timeout 300 \
-  --memory-size 1024
-```
 
 ## Fluxo de Processamento
 
-1. **Upload**: Admin faz upload da imagem para `s3://snapli-originals/events/{eventId}/originals/`
-2. **Trigger**: S3 aciona a função Lambda
-3. **Download**: Lambda baixa a imagem original
+1. **Upload**: Admin faz upload via `POST /api/photos/upload` — API salva original em `s3://snapli-originals/events/{eventId}/originals/` e cria registro DB com `processingStatus: 'pending'`
+2. **Trigger**: S3 aciona Lambda automaticamente
+3. **Download**: Lambda baixa imagem original
 4. **Processamento**:
-   - Detecta faces com Rekognition
-   - Indexa faces na coleção para busca
-   - Cria versão com marca d'água (max 1920px)
-   - Gera thumbnail (300x300px)
-5. **Upload**: Envia imagens processadas para `s3://snapli-watermarked/`
-6. **Conclusão**: Backend atualiza status no banco de dados
+   - Aplica watermark SVG (4 camadas: retângulos semitransparentes + texto SNAPLI)
+   - Sobe watermarked para `s3://snapli-watermarked/events/{eventId}/watermarked/`
+   - Detecta faces com Rekognition (`DetectFaces`)
+   - Indexa faces na coleção (`IndexFaces`)
+5. **Callback**: `POST {API_CALLBACK_URL}` com header `x-lambda-secret`
+   - Payload: `{ originalKey, watermarkedKey, faceCount, faceData, rekognitionFaceId, processingStatus }`
+6. **DB atualizado**: API atualiza `processingStatus: 'completed'`, `watermarkedKey`, `faceCount`, `rekognitionFaceId`
 
 ## Monitoramento
 
-Verifique logs no CloudWatch:
-
 ```bash
+# Logs em tempo real
 aws logs tail /aws/lambda/snapli-image-processor --follow
-```
 
-## Testes Locais
-
-Não é possível testar completamente localmente devido às dependências da AWS.
-Use o AWS SAM para testes locais:
-
-```bash
-sam local invoke snapli-image-processor -e test-event.json
+# Ou via npm script
+cd lambda && npm run logs
 ```
 
 ## Troubleshooting
 
 **Erro: "Task timed out after X seconds"**
-
-- Aumente o timeout da função
-- Aumente a memória (mais memória = mais CPU)
+- Aumente o timeout (máx 15min, configurado em 5min)
+- Imagens muito grandes — considere aumentar memória (mais memória = mais CPU)
 
 **Erro: "Cannot find module 'sharp'"**
-
-- Sharp precisa ser compilado para Lambda
-- Use uma layer ou compile em ambiente Linux
+- Sharp deve ser instalado com flags linux: `npm install --os=linux --cpu=x64 --libc=glibc sharp`
+- Verificar presença de `node_modules/@img/sharp-linux-x64/`
 
 **Erro: "Access Denied" no S3**
+- Verificar permissões da role `snapli-lambda-execution-role`
 
-- Verifique as permissões IAM
-- Confirme que os buckets existem
+**Callback retorna 401**
+- `LAMBDA_INTERNAL_SECRET` na Lambda deve bater com `LAMBDA_INTERNAL_SECRET` no `.env` da API Railway
 
 **Rekognition error: "Collection not found"**
+- Criar coleção: `POST /api/setup/rekognition-collection` ou via script `scripts/setup/setup-rekognition.js`
 
-- Crie a coleção primeiro usando o backend
-- Execute: `POST /api/setup/rekognition-collection`
+**`AWS_REGION` não funciona como env var**
+- É variável reservada do Lambda runtime — remover das env vars configuradas no console
