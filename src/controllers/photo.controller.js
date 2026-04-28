@@ -46,7 +46,7 @@ class PhotoController {
                     // Get image metadata
                     const metadata = await imageService.getMetadata(file.buffer);
 
-                    // Upload original to Bucket A
+                    // Upload original to Bucket A — Lambda trigger handles watermark + Rekognition
                     const originalKey = await s3Service.uploadOriginal(
                         file.buffer,
                         hashedFilename,
@@ -54,22 +54,11 @@ class PhotoController {
                         eventId
                     );
 
-                    // Create watermarked version
-                    const watermarkedBuffer = await imageService.applyWatermark(file.buffer);
-                    const watermarkedKey = await s3Service.uploadWatermarked(
-                        watermarkedBuffer,
-                        hashedFilename,
-                        'image/jpeg',
-                        eventId,
-                        'watermarked'
-                    );
-
-                    // Create photo record
+                    // Create photo record — watermarkedKey will be set by Lambda callback
                     const photo = await Photo.create({
                         eventId,
                         originalFilename: hashedFilename,
                         originalKey,
-                        watermarkedKey,
                         width: metadata.width,
                         height: metadata.height,
                         fileSize: file.size,
@@ -77,11 +66,6 @@ class PhotoController {
                         metadata: metadata,
                         processingStatus: 'pending',
                         uploadedBy: req.userId
-                    });
-
-                    // Process facial recognition asynchronously (in background)
-                    PhotoController.processFacialRecognition(photo.id, file.buffer).catch(err => {
-                        logger.error(`Erro ao processar reconhecimento facial: ${photo.id}`, err);
                     });
 
                     uploadResults.push({
@@ -118,46 +102,6 @@ class PhotoController {
     }
 
     /**
-     * Process facial recognition (async)
-     */
-    static async processFacialRecognition(photoId, imageBuffer) {
-        try {
-            const photo = await Photo.findByPk(photoId);
-            if (!photo) return;
-
-            await photo.update({ processingStatus: 'processing' });
-
-            // Resize image if larger than 5MB (AWS Rekognition limit)
-            let processBuffer = imageBuffer;
-            if (imageBuffer.length > 5 * 1024 * 1024) {
-                processBuffer = await imageService.resizeForRekognition(imageBuffer);
-                logger.info(`Imagem redimensionada para Rekognition: ${photoId} (${imageBuffer.length} -> ${processBuffer.length} bytes)`);
-            }
-
-            // Process with Rekognition
-            const faceResult = await rekognitionService.processPhoto(processBuffer, photoId);
-
-            await photo.update({
-                faceData: faceResult.faces || [],
-                faceCount: faceResult.faceCount || 0,
-                rekognitionFaceId: faceResult.faces?.[0]?.faceId || null,
-                processingStatus: 'completed'
-            });
-
-            logger.info(`Reconhecimento facial concluído: ${photoId} - ${faceResult.faceCount} face(s)`);
-        } catch (error) {
-            logger.error(`Erro no reconhecimento facial: ${photoId}`, error);
-            await Photo.update(
-                {
-                    processingStatus: 'failed',
-                    processingError: error.message
-                },
-                { where: { id: photoId } }
-            );
-        }
-    }
-
-    /**
      * Get photos from event
      */
     async getByEvent(req, res, next) {
@@ -189,8 +133,7 @@ class PhotoController {
                 const data = photo.toJSON();
                 return {
                     ...data,
-                    watermarkedUrl: await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600),
-                    thumbnailUrl: photo.thumbnailKey ? await s3Service.generatePresignedUrl(photo.thumbnailKey, 'watermarked', 3600) : null
+                    watermarkedUrl: photo.watermarkedKey ? await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600) : null
                 };
             }));
 

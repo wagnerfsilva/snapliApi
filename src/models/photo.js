@@ -26,8 +26,8 @@ module.exports = (sequelize, DataTypes) => {
         },
         watermarkedKey: {
             type: DataTypes.STRING,
-            allowNull: false,
-            comment: 'S3 key for watermarked image in Bucket B'
+            allowNull: true,
+            comment: 'S3 key for watermarked image in Bucket B (set by Lambda after processing)'
         },
         thumbnailKey: {
             type: DataTypes.STRING,
