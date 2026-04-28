@@ -18,6 +18,9 @@ const uploadValidation = [
 // Authenticated routes (event admin only)
 router.get('/event/:eventId/gallery', authenticate, authorize('admin'), photoController.getEventPhotosPublic);
 
+// Internal Lambda callback (authenticated via x-lambda-secret header, no JWT needed)
+router.post('/lambda-callback', photoController.lambdaCallback);
+
 // Admin-only routes
 router.post('/upload', authenticate, authorize('admin'), uploadMultiple, uploadValidation, validate, photoController.upload);
 router.get('/event/:eventId', authenticate, authorize('admin'), photoController.getByEvent);

@@ -1,14 +1,20 @@
 {
   "name": "snapli-lambda",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "AWS Lambda function for processing uploaded photos",
   "main": "index.js",
   "scripts": {
-    "deploy": "zip -r function.zip . && aws lambda update-function-code --function-name snapli-image-processor --zip-file fileb://function.zip"
+    "install:linux": "npm install --platform=linux --arch=x64 --libc=glibc",
+    "build": "rm -f function.zip && zip -r function.zip . --exclude '*.zip' --exclude '.git/*' --exclude 'node_modules/.cache/*'",
+    "deploy:code": "npm run build && aws lambda update-function-code --function-name snapli-image-processor --zip-file fileb://function.zip",
+    "deploy:env": "aws lambda update-function-configuration --function-name snapli-image-processor --environment \"$(node -e 'const e=require(\\\"./env.json\\\"); console.log(JSON.stringify({Variables:e}))')\"",
+    "logs": "aws logs tail /aws/lambda/snapli-image-processor --follow",
+    "invoke": "aws lambda invoke --function-name snapli-image-processor --payload fileb://test-event.json --log-type Tail --query 'LogResult' --output text /dev/stderr | base64 -d && cat /dev/null"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.478.0",
-    "@aws-sdk/client-rekognition": "^3.478.0",
-    "sharp": "^0.33.1"
+    "sharp": "^0.33.5"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

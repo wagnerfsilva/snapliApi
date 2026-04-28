@@ -487,6 +487,61 @@ class PhotoController {
             next(error);
         }
     }
+
+    /**
+     * Lambda callback — called by the Lambda function after processing.
+     * Authenticates via x-lambda-secret header and updates the photo record
+     * by looking up the originalKey sent in the payload.
+     */
+    async lambdaCallback(req, res, next) {
+        try {
+            const secret = req.headers['x-lambda-secret'];
+            if (!secret || secret !== process.env.LAMBDA_INTERNAL_SECRET) {
+                return res.status(401).json({ success: false, message: 'Unauthorized' });
+            }
+
+            const {
+                originalKey,
+                watermarkedKey,
+                thumbnailKey,
+                faceCount,
+                faceData,
+                rekognitionFaceId,
+                processingStatus,
+                processingError
+            } = req.body;
+
+            if (!originalKey || !processingStatus) {
+                return res.status(400).json({ success: false, message: 'originalKey e processingStatus são obrigatórios' });
+            }
+
+            const photo = await Photo.findOne({ where: { originalKey } });
+            if (!photo) {
+                logger.warn(`Lambda callback: foto não encontrada para originalKey=${originalKey}`);
+                return res.status(404).json({ success: false, message: 'Foto não encontrada' });
+            }
+
+            const updateData = { processingStatus };
+
+            if (processingStatus === 'completed') {
+                if (watermarkedKey) updateData.watermarkedKey = watermarkedKey;
+                if (thumbnailKey) updateData.thumbnailKey = thumbnailKey;
+                if (faceCount !== undefined) updateData.faceCount = faceCount;
+                if (faceData) updateData.faceData = faceData;
+                if (rekognitionFaceId) updateData.rekognitionFaceId = rekognitionFaceId;
+            }
+
+            if (processingError) updateData.processingError = processingError;
+
+            await photo.update(updateData);
+
+            logger.info(`Lambda callback: foto ${photo.id} atualizada → ${processingStatus} (faceCount=${faceCount ?? '—'})`);
+
+            res.json({ success: true, photoId: photo.id });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 module.exports = new PhotoController();
