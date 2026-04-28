@@ -61,9 +61,6 @@ class SearchController {
 
                 // Generate pre-signed URLs (valid for 1 hour)
                 const watermarkedUrl = await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600);
-                const thumbnailUrl = photo.thumbnailKey
-                    ? await s3Service.generatePresignedUrl(photo.thumbnailKey, 'watermarked', 3600)
-                    : null;
 
                 return {
                     id: photo.id,
@@ -75,8 +72,7 @@ class SearchController {
                     originalFilename: photo.originalFilename,
                     createdAt: photo.createdAt,
                     similarity: match?.similarity || 0,
-                    watermarkedUrl,
-                    thumbnailUrl
+                    watermarkedUrl
                 };
             }));
 
@@ -145,8 +141,7 @@ class SearchController {
                 faceCount: photo.faceCount,
                 originalFilename: photo.originalFilename,
                 createdAt: photo.createdAt,
-                watermarkedUrl: await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600),
-                thumbnailUrl: photo.thumbnailKey ? await s3Service.generatePresignedUrl(photo.thumbnailKey, 'watermarked', 3600) : null
+                watermarkedUrl: await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600)
             })));
 
             res.json({

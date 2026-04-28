@@ -64,23 +64,12 @@ class PhotoController {
                         'watermarked'
                     );
 
-                    // Create thumbnail (from watermarked version to keep watermark)
-                    const thumbnailBuffer = await imageService.createThumbnail(watermarkedBuffer);
-                    const thumbnailKey = await s3Service.uploadWatermarked(
-                        thumbnailBuffer,
-                        hashedFilename,
-                        'image/jpeg',
-                        eventId,
-                        'thumbnail'
-                    );
-
                     // Create photo record
                     const photo = await Photo.create({
                         eventId,
                         originalFilename: hashedFilename,
                         originalKey,
                         watermarkedKey,
-                        thumbnailKey,
                         width: metadata.width,
                         height: metadata.height,
                         fileSize: file.size,
@@ -503,7 +492,6 @@ class PhotoController {
             const {
                 originalKey,
                 watermarkedKey,
-                thumbnailKey,
                 faceCount,
                 faceData,
                 rekognitionFaceId,
@@ -525,7 +513,6 @@ class PhotoController {
 
             if (processingStatus === 'completed') {
                 if (watermarkedKey) updateData.watermarkedKey = watermarkedKey;
-                if (thumbnailKey) updateData.thumbnailKey = thumbnailKey;
                 if (faceCount !== undefined) updateData.faceCount = faceCount;
                 if (faceData) updateData.faceData = faceData;
                 if (rekognitionFaceId) updateData.rekognitionFaceId = rekognitionFaceId;

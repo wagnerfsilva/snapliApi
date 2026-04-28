@@ -15,7 +15,7 @@ const LAMBDA_INTERNAL_SECRET = process.env.LAMBDA_INTERNAL_SECRET;
 
 /**
  * Lambda handler — triggered by S3 PUT on the originals bucket.
- * Generates watermarked image + thumbnail, runs Rekognition,
+ * Generates watermarked image, runs Rekognition,
  * then notifies the API via HTTP callback so the DB record is updated.
  */
 exports.handler = async (event) => {
@@ -58,20 +58,7 @@ exports.handler = async (event) => {
             }));
             console.log(`Watermarked: ${watermarkedKey}`);
 
-            // --- 3. Thumbnail ---
-            const thumbnailBuffer = await createThumbnail(watermarkedBuffer);
-            const thumbnailKey = originalKey.replace('/originals/', '/thumbnails/').replace(/\.[^.]+$/, '.jpg');
-
-            await s3Client.send(new PutObjectCommand({
-                Bucket: WATERMARKED_BUCKET,
-                Key: thumbnailKey,
-                Body: thumbnailBuffer,
-                ContentType: 'image/jpeg',
-                CacheControl: 'max-age=31536000'
-            }));
-            console.log(`Thumbnail: ${thumbnailKey}`);
-
-            // --- 4. Rekognition ---
+            // --- 3. Rekognition ---
             let faceCount = 0;
             let faceData = [];
             let rekognitionFaceId = null;
@@ -117,11 +104,10 @@ exports.handler = async (event) => {
                 }
             }
 
-            // --- 5. Notify API ---
+            // --- 4. Notify API ---
             await sendCallback({
                 originalKey,
                 watermarkedKey,
-                thumbnailKey,
                 faceCount,
                 faceData,
                 rekognitionFaceId,
@@ -215,16 +201,6 @@ async function applyWatermark(buffer) {
     return await sharp(resizedBuffer)
         .composite([{ input: Buffer.from(svgWatermark), top: 0, left: 0 }])
         .jpeg({ quality: 85, progressive: true })
-        .toBuffer();
-}
-
-// ---------------------------------------------------------------------------
-// Thumbnail — 300x300 cover crop from watermarked buffer
-// ---------------------------------------------------------------------------
-async function createThumbnail(buffer) {
-    return await sharp(buffer)
-        .resize(300, 300, { fit: 'cover', position: 'center' })
-        .jpeg({ quality: 80 })
         .toBuffer();
 }
 
