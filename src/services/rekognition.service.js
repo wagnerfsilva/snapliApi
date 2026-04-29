@@ -8,6 +8,14 @@ const {
 } = require('@aws-sdk/client-rekognition');
 const { rekognitionClient, rekognition, isConfigured } = require('../config/aws');
 const logger = require('../utils/logger');
+const sharp = require('sharp');
+
+async function resizeForRekognition(buffer) {
+    return sharp(buffer)
+        .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 85 })
+        .toBuffer();
+}
 
 class RekognitionService {
     constructor() {
@@ -146,10 +154,14 @@ class RekognitionService {
         this._checkAwsConfigured();
         
         try {
+            const rekBuffer = imageBuffer.length > 4.5 * 1024 * 1024
+                ? await resizeForRekognition(imageBuffer)
+                : imageBuffer;
+
             const command = new SearchFacesByImageCommand({
                 CollectionId: rekognition.collectionId,
                 Image: {
-                    Bytes: imageBuffer
+                    Bytes: rekBuffer
                 },
                 MaxFaces: maxFaces,
                 FaceMatchThreshold: rekognition.similarityThreshold,
