@@ -90,7 +90,10 @@ app.get('/health', (req, res) => {
             },
             aws: {
                 configured: awsConfigured || false,
-                status: awsConfigured ? 'available' : 'not configured'
+                status: awsConfigured ? 'available' : 'not configured',
+                region: process.env.AWS_REGION,
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID ? process.env.AWS_ACCESS_KEY_ID.slice(0, 8) + '...' : null,
+                rekognitionCollection: process.env.REKOGNITION_COLLECTION_ID
             },
             smtp: {
                 configured: !!(process.env.SMTP_HOST && process.env.SMTP_USER),
