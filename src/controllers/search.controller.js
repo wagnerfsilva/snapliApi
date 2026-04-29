@@ -22,7 +22,7 @@ class SearchController {
             logger.info('Iniciando busca facial');
 
             // Search for matching faces in Rekognition
-            const searchResult = await rekognitionService.searchFacesByImage(file.buffer, 100);
+            const searchResult = await rekognitionService.searchFacesByImage(file.buffer, 4096);
 
             if (searchResult.matchCount === 0) {
                 return res.json({
