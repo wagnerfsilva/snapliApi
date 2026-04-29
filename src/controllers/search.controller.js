@@ -36,13 +36,18 @@ class SearchController {
                 });
             }
 
-            // Extract photo IDs from external image IDs
-            const photoIds = searchResult.matches.map(match => match.externalImageId);
+            // Extract filenames from external image IDs (Lambda uses filename as externalImageId)
+            const filenameIds = searchResult.matches.map(match => match.externalImageId);
+
+            // Build originalKey patterns to match against DB (key ends with /<externalImageId>.jpg/jpeg/png)
+            const originalKeyConditions = filenameIds.map(fid => ({
+                originalKey: { [Op.like]: `%/${fid}.%` }
+            }));
 
             // Get photos from database
             const photos = await Photo.findAll({
                 where: {
-                    id: { [Op.in]: photoIds },
+                    [Op.or]: originalKeyConditions,
                     processingStatus: 'completed'
                 },
                 include: [
@@ -57,7 +62,8 @@ class SearchController {
 
             // Map similarity scores to photos and generate signed URLs
             const photosWithSimilarity = await Promise.all(photos.map(async (photo) => {
-                const match = searchResult.matches.find(m => m.externalImageId === photo.id);
+                const fileBasename = photo.originalKey.split('/').pop().replace(/\.[^.]+$/, '');
+                const match = searchResult.matches.find(m => m.externalImageId === fileBasename);
 
                 // Generate pre-signed URLs (valid for 1 hour)
                 const watermarkedUrl = await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600);
