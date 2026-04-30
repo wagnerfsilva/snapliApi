@@ -138,20 +138,9 @@ class EmailService {
 
   <!-- LOGO -->
   <tr><td align="center" style="padding-bottom: 32px;">
-    <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-      <td style="vertical-align: middle;">
-        <table role="presentation" cellpadding="0" cellspacing="0" style="width:36px;height:36px;"><tr>
-          <td width="36" height="36" style="width:36px;height:36px;background-color:#C8FF00;border-radius:10px;text-align:center;vertical-align:middle;font-size:20px;line-height:36px;font-family:Arial,sans-serif;">
-            &#128247;
-          </td>
-        </tr></table>
-      </td>
-      <td style="padding-left: 10px; vertical-align: middle;">
-        <span style="font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">
-          <span style="color: #C8FF00;">snap</span><span style="color: #FAFAFA;">li</span>
-        </span>
-      </td>
-    </tr></table>
+    <span style="font-size: 26px; font-weight: 700; letter-spacing: -0.5px;">
+      <span style="color: #C8FF00;">snap</span><span style="color: #FAFAFA;">li</span>
+    </span>
   </td></tr>
 
   <!-- CARD -->
