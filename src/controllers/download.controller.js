@@ -232,12 +232,16 @@ exports.downloadAllPhotos = async (req, res) => {
 
 /**
  * Resend download email
+ * Query param ?override_email=you@email.com redireciona o envio sem alterar o pedido (útil para testes em produção)
  */
 exports.resendDownloadEmail = async (req, res) => {
     try {
         const { orderId } = req.params;
+        const overrideEmail = req.query.override_email;
 
-        const order = await Order.findByPk(orderId);
+        const order = await Order.findByPk(orderId, {
+            include: [{ model: require('../models').OrderItem, as: 'items' }]
+        });
 
         if (!order) {
             return res.status(404).json({ error: 'Pedido não encontrado' });
@@ -251,11 +255,17 @@ exports.resendDownloadEmail = async (req, res) => {
             return res.status(400).json({ error: 'Pedido ainda não foi pago' });
         }
 
-        await emailService.sendDownloadEmail(order);
+        // Se override_email informado, cria cópia do pedido só com o email substituído (não altera o banco)
+        const orderToSend = overrideEmail
+            ? Object.assign(Object.create(Object.getPrototypeOf(order)), order.toJSON(), { customerEmail: overrideEmail })
+            : order;
+
+        await emailService.sendDownloadEmail(orderToSend);
 
         res.json({
             message: 'Email reenviado com sucesso',
-            email: order.customerEmail
+            sentTo: overrideEmail || order.customerEmail,
+            originalEmail: order.customerEmail
         });
 
     } catch (error) {

@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
 const { SESClient } = require('@aws-sdk/client-ses');
+const { Resend } = require('resend');
 
 // Logo Snapli 64x64 PNG pré-gerado (idêntico ao SVG do snapliSite)
 const LOGO_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAHJElEQVR4nOVba2wUVRQ+++p2dwsKCBZQQGhBFDCgxhegIca38YdAAf/hH3laIIoCGog8y6OIvFoooBAV5RkBwyuloDvTilHjTxUTDCYiIgapgMFjvmmnc2d3Znc6O48tTHKSyZ37Ot8959xzzr1DZPGRmdrLTGNlpg0SU4PMdFZiuiozsZ/UPIezzXOqlpjGfMHUjpx66pn6Skw1EtMlv5ltBSiXJKaNElOpbcaTTDGZaZnM9K/fDOUiHRJTRS1TYauYl5hKJabv/WbAQSCkk0xdLTH/JdNg6JTfk3YBhF8kpkFZV16+DpkXQahnKjZkvpapUGL61u9JekAnYd/SAJCbDJ7fk/NKEualbXVyG7b2NuiiThUkppo8mJTXtFYV/fZtyclxiiSmvxWPsdm99X1CPoFQBgA2eDno4fMBrpGDvHhnmN/a1ER4Rxm+eQxCFTUHEa4NkrxGvPpIiEdOjHLJgBjHYomMVDowxqMmRXnN0ZDS1mUJkADA7250XtdI/PqaCPfqG8/KtBn16hfnmesifPwf10D4DQBccbrj5Z+FlMmnMlTULsH3PRZTpGH8nEhLOd5Rhm+ok9qud/84Vx4IuQHAZXKyw2OXiEdOiKYxMOy5Ql74SZhrL2o6vv/XQMt3vKvlqLNge1hpk9oPQIJkOTlncqqjg+cCPHioXscffqqQt34TNKxvBoBI738d5Aef0AMxZHiMD/0RyC8ADp4LcP8hGvMdOiX47c1hlv4zb2MFABD6mFMT5ps7aiBgLKdAICfEXlz57r3ivO0741W3A4BKkCT0LUqCE+pAuXYg6jwmuPPH7MzbAQCEvkUQRk+O+gvAin0hndhbWXlVZSr2hFva4h1lVtpCEm7qoKnDys9D/gBQ10jcuVibyPTKSMb60OVFn4YVo5YoSt/qUIZvi3dkth2gqcu0LbRLt0ROfgLZbQgnR2Sg4y0JnrzY2GnZ9VMwbYfIRIOHxXjXqXSJQN8YA2OJ9d+singLQPIatTg68XiCe5Roeon3edu0VayRgnxrd71T1HdQjMdNL+DyyohCeIcLLNYpvi2uxAfqmJX7Q9znLq2fbj3iOkfJrttMdhrBT1cHH/58IZ+4Qvza6gh36qJNCuJcuT+sY77fPTF+75C5zq46GFLAEUFAHIExRFszYX6BIg1Dn9HK1x0LeQfAyIma5Ydeq+X7zgT4hZejilSo0iE6RUf/ym7oUAd11XZiX+gbY6h153+kGdKyqQXeAVDSHNW1a5/QubcqbaoPcskAbeV7lsYtMa/SkQsBnVqhL/RpBJYaO0ByPAHg8Hlt/0bwYlbvgccLc9qqEFCp7R96stC0HgymWu/InwH3AaiRgrrgxKgO9nR1q7O7MqKkYZXNXN8XX9HUcXND0H0AluzS9G7yEuPtZ32dtnovzbCnm6Bx0wpa+qk6YSxFkxZp2/HSPWH3AZj7gQYAkhVGdeZ/rNWZscr+Hj19pcYcQmSjOjPXanXmbs0TABZsFwB41z4A0yo15pBPyAsAKna3TgXg5NgFYGx5HqpAjZzdCMJgOW0EzTLGnhvBw8I2eO+j5syJmRy4sa0dZ9leTYoeedriNnjBg21Q9sERKh2Y3RGCm22HF7LTCHl7I+vshCsM5q26wu986JMrvEYIhoY+ax4MwQMUgyFEfJm8QnwTD08yBUPIR0A11HIYXl/C4Vgswbf3yRwOgxEx1AWTsPDlKyIK4T311EgJhyXzcLirn+GwnLL/Zk2InAooBlOsn4kQY+z+2XpCZNaG1m9/OQNQ10jcpas2ifLl2VNiOARFYGOUEoMxg+7D1c6WEptSoYEPFTtxmbwHQIZYHtBsAfL2ZocgRn7C0r2aAcO71Tz/lpP6pCiSKL6mxUdN8i4tvuOHoE737Vp+RwGoayTlkEIEwYoktBYArHy3nnGdnXDi1Jhy7QAE8RWPxqAOszc6dzSGrK8o9nl1NCYLIIiSAEJWaMtX9g9H4dvfP0J/OIqVz7vDUVlQBxxXpVp4ZG+RwBQ9QTMAUAcenpjxVWnMq03ZYCfnTG5ckIBHB+fEaKtD8ILzxPGzhQsSsyNKGQ5PjC5I9Lk7lrO1N6HLrl2RwUq9sT7Cd9xp/4oMQJxVHclpn7dyRabBpc4VgouKQ4uyKVHdoYcZIarD9gbf3pNLUjJTtZuDpBJS1zBu8PiUa3Kbw0omB8bSTjyfIwDrIQFjvBw0n6ieaRSuyRfh2qjfk/GawHMtU5F6WXqj3xPygapT/xG6egOt/pUGpt6pv8tU+D0xD2mR2S8z0g2w+skDTFHD/4bqmYolptN+T9JFOpNk6p7tz7FB+LvqOlz500mmgWTlOc7UWWKqu46YT5r+Lmf2QE/wd1Vb9hFg7SWmhaY6b+UBcvjBqC0B0TzXqrStLpentsljLIP/LDPJiKTcCKXtrDLmgjlJTOuSTKNbPDwLz/+KzbxLu4P+8gAAAABJRU5ErkJggg==';
@@ -11,6 +12,12 @@ class EmailService {
         // For development, use ethereal.email or console
         // For production, configure with real SMTP
         this.transporter = this.createTransporter();
+        // Resend HTTP client (used when EMAIL_PROVIDER=resend)
+        if (process.env.EMAIL_PROVIDER === 'resend') {
+            const apiKey = process.env.RESEND_API_KEY || process.env.SMTP_PASS;
+            this.resendClient = new Resend(apiKey);
+            logger.info('Email transport: Resend HTTP API');
+        }
     }
 
     createTransporter() {
@@ -28,19 +35,11 @@ class EmailService {
             };
         }
 
-        // Production mode - check if SMTP is configured
-        if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-            logger.warn('SMTP not configured, emails will be logged only');
-            return {
-                sendMail: async (options) => {
-                    logger.info('📧 Email (NO SMTP - PRODUCTION):', {
-                        to: options.to,
-                        subject: options.subject,
-                        text: options.text?.substring(0, 200)
-                    });
-                    return { messageId: 'no-smtp-' + Date.now() };
-                }
-            };
+        // Resend HTTP API — uses HTTPS port 443, never blocked by Railway
+        if (process.env.EMAIL_PROVIDER === 'resend') {
+            // resendClient is set in constructor; createTransporter returns a dummy
+            // actual sending is done via this.resendClient in sendViaResend()
+            return { sendMail: null };
         }
 
         // Production mode with AWS SES - uses HTTPS (port 443), unblocked by cloud providers
@@ -58,6 +57,21 @@ class EmailService {
             });
         }
 
+        // Production mode - check if SMTP is configured
+        if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+            logger.warn('⚠️  No email transport configured — emails will be logged only. Set EMAIL_PROVIDER=resend or EMAIL_PROVIDER=ses in Railway.');
+            return {
+                sendMail: async (options) => {
+                    logger.info('📧 Email (NO TRANSPORT - PRODUCTION):', {
+                        to: options.to,
+                        subject: options.subject,
+                        text: options.text?.substring(0, 200)
+                    });
+                    return { messageId: 'no-transport-' + Date.now() };
+                }
+            };
+        }
+
         // Production mode with SMTP configured - use real SMTP
         return nodemailer.createTransport({
             host: process.env.SMTP_HOST,
@@ -71,6 +85,26 @@ class EmailService {
             greetingTimeout: 10000,
             socketTimeout: 15000
         });
+    }
+
+    /**
+     * Send via Resend HTTP API (avoids Railway SMTP port blocking)
+     */
+    async sendViaResend(mailOptions) {
+        const { data, error } = await this.resendClient.emails.send({
+            from: mailOptions.from,
+            to: Array.isArray(mailOptions.to) ? mailOptions.to : [mailOptions.to],
+            bcc: mailOptions.bcc ? (Array.isArray(mailOptions.bcc) ? mailOptions.bcc : [mailOptions.bcc]) : undefined,
+            subject: mailOptions.subject,
+            html: mailOptions.html,
+            text: mailOptions.text,
+            attachments: mailOptions.attachments?.map(a => ({
+                filename: a.filename,
+                content: a.content
+            }))
+        });
+        if (error) throw new Error(`Resend API error: ${error.message || JSON.stringify(error)}`);
+        return { messageId: data.id };
     }
 
     /**
@@ -243,7 +277,11 @@ Snapli - ${new Date().getFullYear()}
                 `
             };
 
-            await this.transporter.sendMail(mailOptions);
+            if (this.resendClient) {
+                await this.sendViaResend(mailOptions);
+            } else {
+                await this.transporter.sendMail(mailOptions);
+            }
             logger.info(`Email de download enviado para ${order.customerEmail}`);
 
             return true;
@@ -314,7 +352,11 @@ Assim que o pagamento for confirmado, você receberá um email com o link para d
                 `
             };
 
-            await this.transporter.sendMail(mailOptions);
+            if (this.resendClient) {
+                await this.sendViaResend(mailOptions);
+            } else {
+                await this.transporter.sendMail(mailOptions);
+            }
             logger.info(`Email de confirmação enviado para ${order.customerEmail}`);
 
             return true;

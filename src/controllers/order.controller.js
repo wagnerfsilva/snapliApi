@@ -346,9 +346,14 @@ exports.validatePayment = async (req, res) => {
                 order.downloadExpiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
                 await order.save();
 
+                // Recarrega pedido com itens para o email
+                const orderWithItems = await Order.findByPk(order.id, {
+                    include: [{ model: OrderItem, as: 'items' }]
+                });
+
                 // Envia email com link de download (não bloqueia confirmação)
                 try {
-                    await emailService.sendDownloadEmail(order);
+                    await emailService.sendDownloadEmail(orderWithItems);
                 } catch (emailError) {
                     logger.error('Falha ao enviar email de download (pagamento já confirmado)', {
                         orderId: order.id,
@@ -489,9 +494,14 @@ exports.asaasWebhook = async (req, res) => {
                 order.downloadExpiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
                 await order.save();
 
+                // Recarrega pedido com itens para o email
+                const orderWithItems = await Order.findByPk(order.id, {
+                    include: [{ model: OrderItem, as: 'items' }]
+                });
+
                 // Envia email com link de download (não bloqueia webhook)
                 try {
-                    await emailService.sendDownloadEmail(order);
+                    await emailService.sendDownloadEmail(orderWithItems);
                 } catch (emailError) {
                     logger.error('Falha ao enviar email de download via webhook', {
                         orderId: order.id,
