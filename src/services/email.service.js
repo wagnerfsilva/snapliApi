@@ -122,11 +122,7 @@ class EmailService {
                 to: order.customerEmail,
                 bcc: process.env.EMAIL_BCC || 'wagnerdesignweb@gmail.com',
                 subject: 'Pagamento Confirmado',
-                attachments: [{
-                    filename: 'logo.png',
-                    content: Buffer.from(LOGO_PNG_BASE64, 'base64'),
-                    cid: 'snapli-logo'
-                }],
+
                 html: `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -144,7 +140,7 @@ class EmailService {
   <tr><td align="center" style="padding-bottom: 32px;">
     <table role="presentation" cellpadding="0" cellspacing="0"><tr>
       <td style="vertical-align: middle;">
-        <img src="cid:snapli-logo" width="36" height="36" alt="Snapli" style="display: block; border-radius: 10px;" />
+        <img src="data:image/png;base64,${LOGO_PNG_BASE64}" width="36" height="36" alt="Snapli" style="display: block; border-radius: 10px;" />
       </td>
       <td style="padding-left: 10px; vertical-align: middle;">
         <span style="font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">
