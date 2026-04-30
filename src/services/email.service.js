@@ -104,7 +104,7 @@ class EmailService {
             }))
         });
         if (error) throw new Error(`Resend API error: ${error.message || JSON.stringify(error)}`);
-        return { messageId: data.id };
+        return { messageId: data?.id || 'resend-ok' };
     }
 
     /**

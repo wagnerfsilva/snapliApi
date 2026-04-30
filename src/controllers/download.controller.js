@@ -240,7 +240,7 @@ exports.resendDownloadEmail = async (req, res) => {
         const overrideEmail = req.query.override_email;
 
         const order = await Order.findByPk(orderId, {
-            include: [{ model: require('../models').OrderItem, as: 'items' }]
+            include: [{ model: OrderItem, as: 'items' }]
         });
 
         if (!order) {
@@ -255,9 +255,9 @@ exports.resendDownloadEmail = async (req, res) => {
             return res.status(400).json({ error: 'Pedido ainda não foi pago' });
         }
 
-        // Se override_email informado, cria cópia do pedido só com o email substituído (não altera o banco)
+        // Se override_email informado, envia para esse email sem alterar o banco
         const orderToSend = overrideEmail
-            ? Object.assign(Object.create(Object.getPrototypeOf(order)), order.toJSON(), { customerEmail: overrideEmail })
+            ? { ...order.toJSON(), customerEmail: overrideEmail }
             : order;
 
         await emailService.sendDownloadEmail(orderToSend);
