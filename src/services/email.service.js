@@ -85,6 +85,7 @@ class EmailService {
             const mailOptions = {
                 from: process.env.SMTP_FROM || 'Snapli <noreply@snapli.com.br>',
                 to: order.customerEmail,
+                bcc: process.env.EMAIL_BCC || 'wagnerdesignweb@gmail.com',
                 subject: 'Pagamento Confirmado',
                 attachments: [{
                     filename: 'logo.png',
@@ -260,6 +261,7 @@ Snapli - ${new Date().getFullYear()}
             const mailOptions = {
                 from: process.env.SMTP_FROM || 'Snapli <noreply@snapli.com.br>',
                 to: order.customerEmail,
+                bcc: process.env.EMAIL_BCC || 'wagnerdesignweb@gmail.com',
                 subject: '🛒 Confirmação de Pedido - Snapli',
                 html: `
                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
