@@ -47,3 +47,4 @@ logs/
 # Uploads (local development)
 uploads/
 temp/
+lambda/function.zip

@@ -30,7 +30,7 @@ const CONFIG = {
     DELAY_BETWEEN_BATCHES: 2000,      // 2s entre lotes
     MAX_RETRIES: 3,                   // Tentativas por lote
     REQUEST_TIMEOUT: 180000,          // 3 minutos por lote
-    MAX_FILE_SIZE: 10 * 1024 * 1024,  // 10MB (limite da API)
+    MAX_FILE_SIZE: 20 * 1024 * 1024,  // 20MB (limite da API)
 };
 
 const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];

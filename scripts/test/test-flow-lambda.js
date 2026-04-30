@@ -76,22 +76,10 @@ async function run() {
     console.log('   OK');
 
     // -----------------------------------------------------------------------
-    // 2. Upload S3 originals → dispara trigger
+    // 2. Criar registro no banco ANTES do upload (igual ao fluxo de produção)
     // -----------------------------------------------------------------------
     console.log('');
-    console.log('[2/6] Upload para S3 originals (dispara trigger Lambda)...');
-    console.log(`   s3://${ORIG_BUCKET}/${ORIG_KEY}`);
-    await s3.send(new PutObjectCommand({
-        Bucket: ORIG_BUCKET, Key: ORIG_KEY, Body: imgBuffer, ContentType: 'image/jpeg'
-    }));
-    const uploadedAt = Date.now();
-    console.log('   Upload OK — trigger S3 -> Lambda disparado');
-
-    // -----------------------------------------------------------------------
-    // 3. Criar registro no banco
-    // -----------------------------------------------------------------------
-    console.log('');
-    console.log('[3/6] Criando registro de photo no banco (status=pending)...');
+    console.log('[2/6] Criando registro de photo no banco (status=pending)...');
     await seq.query(`
         INSERT INTO photos (id, "eventId", "originalFilename", "originalKey", "watermarkedKey", "thumbnailKey",
             width, height, "fileSize", "mimeType", "processingStatus", "uploadedBy", "createdAt", "updatedAt")
@@ -103,6 +91,18 @@ async function run() {
         )
     `);
     console.log(`   Photo criada no banco: ${PHOTO_UUID}`);
+
+    // -----------------------------------------------------------------------
+    // 3. Upload S3 originals → dispara trigger
+    // -----------------------------------------------------------------------
+    console.log('');
+    console.log('[3/6] Upload para S3 originals (dispara trigger Lambda)...');
+    console.log(`   s3://${ORIG_BUCKET}/${ORIG_KEY}`);
+    await s3.send(new PutObjectCommand({
+        Bucket: ORIG_BUCKET, Key: ORIG_KEY, Body: imgBuffer, ContentType: 'image/jpeg'
+    }));
+    const uploadedAt = Date.now();
+    console.log('   Upload OK — trigger S3 -> Lambda disparado');
 
     // -----------------------------------------------------------------------
     // 4. Aguardar Lambda
