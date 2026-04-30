@@ -140,7 +140,17 @@ class EmailService {
   <tr><td align="center" style="padding-bottom: 32px;">
     <table role="presentation" cellpadding="0" cellspacing="0"><tr>
       <td style="vertical-align: middle;">
-        <img src="https://snapli-watermarked.s3.us-east-1.amazonaws.com/assets/logo.png" width="36" height="36" alt="Snapli" style="display: block; border-radius: 10px;" />
+        <svg width="36" height="36" viewBox="0 0 64 64" fill="none" style="display:block;border-radius:10px;" xmlns="http://www.w3.org/2000/svg">
+          <rect width="64" height="64" rx="16" fill="#C8FF00" />
+          <circle cx="32" cy="32" r="18" stroke="#09090B" stroke-width="2.8" fill="none" />
+          <circle cx="32" cy="32" r="9" stroke="#09090B" stroke-width="2.8" fill="none" />
+          <line x1="32" y1="14" x2="32" y2="23" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
+          <line x1="47.6" y1="23" x2="39.8" y2="27.5" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
+          <line x1="47.6" y1="41" x2="39.8" y2="36.5" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
+          <line x1="32" y1="50" x2="32" y2="41" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
+          <line x1="16.4" y1="41" x2="24.2" y2="36.5" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
+          <line x1="16.4" y1="23" x2="24.2" y2="27.5" stroke="#09090B" stroke-width="2.2" stroke-linecap="round" />
+        </svg>
       </td>
       <td style="padding-left: 10px; vertical-align: middle;">
         <span style="font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">
