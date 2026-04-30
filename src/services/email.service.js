@@ -100,7 +100,8 @@ class EmailService {
             text: mailOptions.text,
             attachments: mailOptions.attachments?.map(a => ({
                 filename: a.filename,
-                content: a.content
+                content: a.content,
+                ...(a.cid ? { content_id: a.cid } : {})
             }))
         });
         if (error) throw new Error(`Resend API error: ${error.message || JSON.stringify(error)}`);
