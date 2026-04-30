@@ -140,7 +140,7 @@ class EmailService {
   <tr><td align="center" style="padding-bottom: 32px;">
     <table role="presentation" cellpadding="0" cellspacing="0"><tr>
       <td style="vertical-align: middle;">
-        <img src="data:image/png;base64,${LOGO_PNG_BASE64}" width="36" height="36" alt="Snapli" style="display: block; border-radius: 10px;" />
+        <img src="https://snapli-watermarked.s3.us-east-1.amazonaws.com/assets/logo.png" width="36" height="36" alt="Snapli" style="display: block; border-radius: 10px;" />
       </td>
       <td style="padding-left: 10px; vertical-align: middle;">
         <span style="font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">
