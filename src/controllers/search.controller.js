@@ -4,6 +4,13 @@ const rekognitionService = require('../services/rekognition.service');
 const s3Service = require('../services/s3.service');
 const logger = require('../utils/logger');
 
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function basenameWithoutExt(value) {
+    if (!value) return null;
+    return value.split('/').pop().replace(/\.[^.]+$/, '');
+}
+
 class SearchController {
     /**
      * Search photos by facial recognition
@@ -36,18 +43,22 @@ class SearchController {
                 });
             }
 
-            // Extract filenames from external image IDs (Lambda uses filename as externalImageId)
-            const filenameIds = searchResult.matches.map(match => match.externalImageId);
+            const externalImageIds = [...new Set(searchResult.matches.map(match => match.externalImageId).filter(Boolean))];
+            const photoIds = externalImageIds.filter(id => uuidRegex.test(id));
 
-            // Build originalKey patterns to match against DB (key ends with /<externalImageId>.jpg/jpeg/png)
-            const originalKeyConditions = filenameIds.map(fid => ({
-                originalKey: { [Op.like]: `%/${fid}.%` }
-            }));
+            const matchConditions = externalImageIds.flatMap(externalImageId => ([
+                { originalKey: { [Op.like]: `%/${externalImageId}.%` } },
+                { originalFilename: { [Op.like]: `${externalImageId}.%` } }
+            ]));
+
+            if (photoIds.length > 0) {
+                matchConditions.push({ id: { [Op.in]: photoIds } });
+            }
 
             // Get photos from database
             const photos = await Photo.findAll({
                 where: {
-                    [Op.or]: originalKeyConditions,
+                    [Op.or]: matchConditions,
                     processingStatus: 'completed'
                 },
                 include: [
@@ -62,8 +73,12 @@ class SearchController {
 
             // Map similarity scores to photos and generate signed URLs
             const photosWithSimilarity = await Promise.all(photos.map(async (photo) => {
-                const fileBasename = photo.originalKey.split('/').pop().replace(/\.[^.]+$/, '');
-                const match = searchResult.matches.find(m => m.externalImageId === fileBasename);
+                const externalImageIdCandidates = [
+                    photo.id,
+                    basenameWithoutExt(photo.originalKey),
+                    basenameWithoutExt(photo.originalFilename)
+                ].filter(Boolean);
+                const match = searchResult.matches.find(m => externalImageIdCandidates.includes(m.externalImageId));
 
                 // Generate pre-signed URLs (valid for 1 hour)
                 const watermarkedUrl = await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600);
