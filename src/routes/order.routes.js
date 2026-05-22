@@ -35,14 +35,12 @@ router.get('/event/:eventId', authenticate, orderController.listOrdersByEvent);
 // Sync order with Asaas
 router.post('/:orderId/sync-asaas', authenticate, orderController.syncOrderWithAsaas);
 
-/**
- * DEV MODE ONLY
- */
+if (process.env.NODE_ENV === 'development') {
+    // Confirm payment manually (testing only)
+    router.post('/:orderId/confirm-payment', orderController.confirmPaymentManually);
 
-// Confirm payment manually (testing)
-router.post('/:orderId/confirm-payment', orderController.confirmPaymentManually);
-
-// Simulate payment confirmation (bypass for testing)
-router.post('/:orderId/simulate-payment', orderController.simulatePayment);
+    // Simulate payment confirmation (testing only)
+    router.post('/:orderId/simulate-payment', orderController.simulatePayment);
+}
 
 module.exports = router;
