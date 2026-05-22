@@ -19,7 +19,9 @@ class EventController {
                 sortOrder = 'DESC'
             } = req.query;
 
-            const offset = (parseInt(page) - 1) * parseInt(limit);
+            const safePage  = Math.max(parseInt(page)  || 1,  1);
+            const safeLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+            const offset = (safePage - 1) * safeLimit;
 
             // Build where clause
             const where = {};
@@ -44,7 +46,7 @@ class EventController {
 
             const { count, rows: events } = await Event.findAndCountAll({
                 where,
-                limit: parseInt(limit),
+                limit: safeLimit,
                 offset,
                 order: [[sortBy, sortOrder]],
                 attributes: {
@@ -91,9 +93,9 @@ class EventController {
                     events,
                     pagination: {
                         total: count,
-                        page: parseInt(page),
-                        limit: parseInt(limit),
-                        totalPages: Math.ceil(count / parseInt(limit))
+                        page: safePage,
+                        limit: safeLimit,
+                        totalPages: Math.ceil(count / safeLimit)
                     }
                 }
             });

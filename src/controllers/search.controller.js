@@ -137,7 +137,9 @@ class SearchController {
                 hasFaces
             } = req.query;
 
-            const offset = (parseInt(page) - 1) * parseInt(limit);
+            const safePage  = Math.max(parseInt(page)  || 1,  1);
+            const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
+            const offset = (safePage - 1) * safeLimit;
 
             const where = {
                 eventId,
@@ -150,7 +152,7 @@ class SearchController {
 
             const { count, rows: photos } = await Photo.findAndCountAll({
                 where,
-                limit: parseInt(limit),
+                limit: safeLimit,
                 offset,
                 order: [['createdAt', 'DESC']],
                 attributes: { exclude: ['faceData'] }
@@ -173,9 +175,9 @@ class SearchController {
                     photos: photosWithUrls,
                     pagination: {
                         total: count,
-                        page: parseInt(page),
-                        limit: parseInt(limit),
-                        totalPages: Math.ceil(count / parseInt(limit))
+                        page: safePage,
+                        limit: safeLimit,
+                        totalPages: Math.ceil(count / safeLimit)
                     }
                 }
             });

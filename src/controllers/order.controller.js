@@ -272,10 +272,13 @@ exports.listOrders = async (req, res) => {
             where.status = status;
         }
 
+        const safeLimit  = Math.min(Math.max(parseInt(limit)  || 50, 1), 100);
+        const safeOffset = Math.max(parseInt(offset) || 0, 0);
+
         const orders = await Order.findAll({
             where,
-            limit: parseInt(limit),
-            offset: parseInt(offset),
+            limit: safeLimit,
+            offset: safeOffset,
             order: [['createdAt', 'DESC']],
             include: [
                 {

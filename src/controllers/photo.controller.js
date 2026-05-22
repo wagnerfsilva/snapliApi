@@ -113,7 +113,9 @@ class PhotoController {
                 processingStatus
             } = req.query;
 
-            const offset = (parseInt(page) - 1) * parseInt(limit);
+            const safePage  = Math.max(parseInt(page)  || 1,  1);
+            const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
+            const offset = (safePage - 1) * safeLimit;
 
             const where = { eventId };
             if (processingStatus) {
@@ -122,7 +124,7 @@ class PhotoController {
 
             const { count, rows: photos } = await Photo.findAndCountAll({
                 where,
-                limit: parseInt(limit),
+                limit: safeLimit,
                 offset,
                 order: [['createdAt', 'DESC']],
                 attributes: { exclude: ['faceData'] } // Exclude large JSONB field
@@ -143,9 +145,9 @@ class PhotoController {
                     photos: photosWithUrls,
                     pagination: {
                         total: count,
-                        page: parseInt(page),
-                        limit: parseInt(limit),
-                        totalPages: Math.ceil(count / parseInt(limit))
+                        page: safePage,
+                        limit: safeLimit,
+                        totalPages: Math.ceil(count / safeLimit)
                     }
                 }
             });
@@ -303,7 +305,9 @@ class PhotoController {
                 limit = 50
             } = req.query;
 
-            const offset = (parseInt(page) - 1) * parseInt(limit);
+            const safePage  = Math.max(parseInt(page)  || 1,  1);
+            const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
+            const offset = (safePage - 1) * safeLimit;
 
             // Verify event exists and is active
             const event = await Event.findByPk(eventId);
@@ -334,7 +338,7 @@ class PhotoController {
                     eventId,
                     processingStatus: 'completed'
                 },
-                limit: parseInt(limit),
+                limit: safeLimit,
                 offset,
                 order: [['createdAt', 'DESC']],
                 attributes: ['id', 'eventId', 'watermarkedKey', 'thumbnailKey', 'width', 'height', 'faceCount', 'createdAt']
@@ -364,9 +368,9 @@ class PhotoController {
                     photos: photosWithUrls,
                     pagination: {
                         total: count,
-                        page: parseInt(page),
-                        limit: parseInt(limit),
-                        totalPages: Math.ceil(count / parseInt(limit))
+                        page: safePage,
+                        limit: safeLimit,
+                        totalPages: Math.ceil(count / safeLimit)
                     }
                 }
             });
@@ -428,7 +432,11 @@ class PhotoController {
     async lambdaCallback(req, res, next) {
         try {
             const secret = req.headers['x-lambda-secret'];
-            if (!secret || secret !== process.env.LAMBDA_INTERNAL_SECRET) {
+            const expected = process.env.LAMBDA_INTERNAL_SECRET || '';
+            const secretOk = secret &&
+                secret.length === expected.length &&
+                require('crypto').timingSafeEqual(Buffer.from(secret), Buffer.from(expected));
+            if (!secretOk) {
                 return res.status(401).json({ success: false, message: 'Unauthorized' });
             }
 
