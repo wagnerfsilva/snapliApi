@@ -77,30 +77,11 @@ app.use('/api', routes);
 // Health check endpoint
 app.get('/health', (req, res) => {
     const { isConfigured: awsConfigured } = require('./config/aws');
-    
+    const allOk = (db.isConfigured || false) && (awsConfigured || false);
+
     res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development',
-        version: '1.0.0',
-        services: {
-            database: {
-                configured: db.isConfigured || false,
-                status: db.isConfigured ? 'available' : 'not configured'
-            },
-            aws: {
-                configured: awsConfigured || false,
-                status: awsConfigured ? 'available' : 'not configured',
-                region: process.env.AWS_REGION,
-                accessKeyId: process.env.AWS_ACCESS_KEY_ID ? process.env.AWS_ACCESS_KEY_ID.slice(0, 8) + '...' : null,
-                rekognitionCollection: process.env.REKOGNITION_COLLECTION_ID
-            },
-            smtp: {
-                configured: !!(process.env.SMTP_HOST && process.env.SMTP_USER),
-                status: (process.env.SMTP_HOST && process.env.SMTP_USER) ? 'available' : 'not configured'
-            }
-        },
-        message: db.isConfigured && awsConfigured ? 'All systems operational' : 'Running with limited functionality - check services configuration'
+        status: allOk ? 'ok' : 'degraded',
+        timestamp: new Date().toISOString()
     });
 });
 
