@@ -24,14 +24,20 @@ const CONFIG = {
     FOLDER_PATH: process.argv[2] || '/Users/pulpa/Downloads/Editadas/',
     EVENT_ID: process.argv[3] || '803bff31-1dab-4ef9-8223-5a0ade60ca32',
     API_URL: process.env.API_URL || 'https://snapliapi-production.up.railway.app/api',
-    LOGIN: process.env.LOGIN || 'fotografo@gmail.com',
-    SENHA: process.env.SENHA || '%65434343',
+    LOGIN: process.env.LOGIN,
+    SENHA: process.env.SENHA,
     BATCH_SIZE: 5,                    // Fotos por lote (conservador para evitar timeout)
     DELAY_BETWEEN_BATCHES: 2000,      // 2s entre lotes
     MAX_RETRIES: 3,                   // Tentativas por lote
     REQUEST_TIMEOUT: 180000,          // 3 minutos por lote
     MAX_FILE_SIZE: 30 * 1024 * 1024,  // 30MB (limite da API)
 };
+
+if (!CONFIG.LOGIN || !CONFIG.SENHA) {
+    console.error('❌ Defina LOGIN e SENHA como variáveis de ambiente antes de executar.');
+    console.error('   Exemplo: LOGIN=seu@email.com SENHA=suasenha node batch-upload.js [pasta] [eventId]');
+    process.exit(1);
+}
 
 const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
 const PROGRESS_FILE = path.join(__dirname, 'upload-progress.json');

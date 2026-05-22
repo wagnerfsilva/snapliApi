@@ -3,11 +3,17 @@ const path = require('path');
 const fetch = require('node-fetch');
 const FormData = require('form-data');
 
-const API_URL = 'https://snapliapi-production.up.railway.app/api';
+const API_URL = process.env.API_URL || 'https://snapliapi-production.up.railway.app/api';
 const EVENT_ID = 'ab00f274-ea68-4749-9a7f-3cf0aef3d5b8';
 const FOLDER = '/Volumes/Externo/Charles/Charles';
-const LOGIN = 'fotografo@gmail.com';
-const SENHA = '%65434343';
+const LOGIN = process.env.LOGIN;
+const SENHA = process.env.SENHA;
+
+if (!LOGIN || !SENHA) {
+    console.error('❌ Defina LOGIN e SENHA como variáveis de ambiente antes de executar.');
+    console.error('   Exemplo: LOGIN=seu@email.com SENHA=suasenha node retry-charles.js');
+    process.exit(1);
+}
 
 const FAILED_FILES = [
   'Chacha-3208.jpg','Chacha-3209.jpg','Chacha-321.jpg','Chacha-3210.jpg','Chacha-3211.jpg',
