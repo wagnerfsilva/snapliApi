@@ -238,8 +238,6 @@ exports.getOrder = async (req, res) => {
                 status: order.status,
                 totalAmount: order.totalAmount,
                 paidAt: order.paidAt,
-                downloadToken: order.downloadToken,
-                downloadExpiresAt: order.downloadExpiresAt,
                 createdAt: order.createdAt
             },
             items: order.items.map(item => ({
