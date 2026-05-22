@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/order.controller');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 
 /**
  * PUBLIC ROUTES
@@ -36,11 +36,11 @@ router.get('/event/:eventId', authenticate, orderController.listOrdersByEvent);
 router.post('/:orderId/sync-asaas', authenticate, orderController.syncOrderWithAsaas);
 
 if (process.env.NODE_ENV === 'development') {
-    // Confirm payment manually (testing only)
-    router.post('/:orderId/confirm-payment', orderController.confirmPaymentManually);
+    // Confirm payment manually (testing only — requires admin auth)
+    router.post('/:orderId/confirm-payment', authenticate, authorize('admin'), orderController.confirmPaymentManually);
 
-    // Simulate payment confirmation (testing only)
-    router.post('/:orderId/simulate-payment', orderController.simulatePayment);
+    // Simulate payment confirmation (testing only — requires admin auth)
+    router.post('/:orderId/simulate-payment', authenticate, authorize('admin'), orderController.simulatePayment);
 }
 
 module.exports = router;
