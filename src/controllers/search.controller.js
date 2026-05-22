@@ -285,7 +285,8 @@ class SearchController {
             const salesData = await Order.findAll({
                 attributes: [
                     [fn('TO_CHAR', col('paidAt'), dateFormat), 'period'],
-                    [fn('SUM', col('totalAmount')), 'revenue']
+                    [fn('SUM', col('totalAmount')), 'revenue'],
+                    [fn('COUNT', col('id')), 'ordersCount']
                 ],
                 where: whereClause,
                 group: [fn('TO_CHAR', col('paidAt'), dateFormat)],
@@ -298,7 +299,8 @@ class SearchController {
                 data: {
                     sales: salesData.map(sale => ({
                         period: sale.period,
-                        revenue: parseFloat(sale.revenue).toFixed(2)
+                        revenue: parseFloat(sale.revenue).toFixed(2),
+                        ordersCount: parseInt(sale.ordersCount, 10)
                     })),
                     groupBy,
                     period: startDate && endDate ? 'custom' : period
