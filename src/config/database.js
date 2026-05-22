@@ -15,6 +15,10 @@ const buildDbConfig = (extras = {}) => {
     };
 };
 
+// Defaults to true (secure). Set DB_SSL_REJECT_UNAUTHORIZED=false only if the
+// server uses a self-signed cert that cannot be added to the trust store.
+const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false';
+
 module.exports = {
     development: {
         ...buildDbConfig(),
@@ -22,7 +26,7 @@ module.exports = {
         dialectOptions: {
             ssl: {
                 require: true,
-                rejectUnauthorized: false
+                rejectUnauthorized
             }
         },
         logging: console.log
@@ -38,7 +42,7 @@ module.exports = {
         dialectOptions: {
             ssl: {
                 require: true,
-                rejectUnauthorized: false
+                rejectUnauthorized
             },
             family: 4,
             prepare: false

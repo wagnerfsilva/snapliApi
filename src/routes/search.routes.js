@@ -2,14 +2,14 @@ const express = require('express');
 const router = express.Router();
 const searchController = require('../controllers/search.controller');
 const { uploadSearchPhoto } = require('../middleware/upload');
-const { authenticate, optionalAuth } = require('../middleware/auth');
+const { authenticate, optionalAuth, authorize } = require('../middleware/auth');
 
 // Public routes (no authentication required)
 router.post('/face', optionalAuth, uploadSearchPhoto, searchController.searchByFace);
 
 // Authenticated routes
 router.get('/event/:eventId', authenticate, searchController.searchByEvent);
-router.get('/statistics', searchController.getStatistics);
-router.get('/sales-statistics', searchController.getSalesStatistics);
+router.get('/statistics', authenticate, authorize('admin'), searchController.getStatistics);
+router.get('/sales-statistics', authenticate, authorize('admin'), searchController.getSalesStatistics);
 
 module.exports = router;
