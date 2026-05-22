@@ -1,5 +1,5 @@
-const { Event, Photo, User } = require('../models');
-const { Op } = require('sequelize');
+const { Event, Photo, User, sequelize } = require('../models');
+const { Op, literal } = require('sequelize');
 const logger = require('../utils/logger');
 
 class EventController {
@@ -47,6 +47,35 @@ class EventController {
                 limit: parseInt(limit),
                 offset,
                 order: [[sortBy, sortOrder]],
+                attributes: {
+                    include: [
+                        [
+                            literal(`(
+                                SELECT COALESCE(SUM(sub."totalAmount"), 0)
+                                FROM (
+                                    SELECT DISTINCT o.id, o."totalAmount"
+                                    FROM orders o
+                                    INNER JOIN order_items oi ON oi."orderId" = o.id
+                                    INNER JOIN photos p ON p.id = oi."photoId"
+                                    WHERE p."eventId" = "Event"."id"
+                                    AND o.status IN ('paid', 'completed')
+                                ) sub
+                            )`),
+                            'totalRevenue'
+                        ],
+                        [
+                            literal(`(
+                                SELECT COUNT(DISTINCT o.id)
+                                FROM orders o
+                                INNER JOIN order_items oi ON oi."orderId" = o.id
+                                INNER JOIN photos p ON p.id = oi."photoId"
+                                WHERE p."eventId" = "Event"."id"
+                                AND o.status IN ('paid', 'completed')
+                            )`),
+                            'paidOrdersCount'
+                        ]
+                    ]
+                },
                 include: [
                     {
                         model: User,
