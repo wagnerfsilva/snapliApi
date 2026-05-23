@@ -477,6 +477,26 @@ exports.getPixQrCode = async (req, res) => {
  */
 exports.asaasWebhook = async (req, res) => {
     try {
+        // Verificar autenticidade da requisição via token do Asaas
+        const webhookToken = process.env.ASAAS_WEBHOOK_TOKEN;
+        if (webhookToken) {
+            const receivedToken = req.headers['asaas-access-token'];
+            const tokenOk = receivedToken &&
+                receivedToken.length === webhookToken.length &&
+                require('crypto').timingSafeEqual(
+                    Buffer.from(receivedToken),
+                    Buffer.from(webhookToken)
+                );
+            if (!tokenOk) {
+                logger.warn('Webhook rejeitado: token inválido ou ausente', {
+                    ip: req.ip
+                });
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+        } else {
+            logger.warn('ASAAS_WEBHOOK_TOKEN não configurado — verificação de autenticidade desativada');
+        }
+
         const webhookData = req.body;
 
         logger.info('Webhook recebido do Asaas', { event: webhookData.event });
