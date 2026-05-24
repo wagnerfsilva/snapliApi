@@ -56,10 +56,10 @@ if (process.env.NODE_ENV !== 'test') {
     }));
 }
 
-// Rate limiting
+// Rate limiting — geral
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 1000, // Limit each IP to 1000 requests per windowMs
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 1000,
     message: {
         success: false,
         message: 'Muitas requisições deste IP, tente novamente mais tarde.'
@@ -68,8 +68,34 @@ const limiter = rateLimit({
     legacyHeaders: false
 });
 
+// Rate limiting — login (M2): 15 tentativas por 15 min por IP
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 15,
+    message: {
+        success: false,
+        message: 'Muitas tentativas de login. Tente novamente em 15 minutos.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+// Rate limiting — busca facial (M3): 30 buscas por minuto por IP
+const faceLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    message: {
+        success: false,
+        message: 'Muitas buscas por imagem. Tente novamente em alguns instantes.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
 // Apply rate limiting to API routes
 app.use('/api/', limiter);
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/search/face', faceLimiter);
 
 // Mount API routes
 app.use('/api', routes);
