@@ -9,7 +9,7 @@ const crypto = require('crypto');
  */
 exports.createOrder = async (req, res) => {
     try {
-        const { customerName, customerEmail, items, bypassPayment } = req.body;
+        const { customerName, customerEmail, items } = req.body;
 
         // Validations
         if (!customerName || !customerEmail || !items || items.length === 0) {
