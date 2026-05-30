@@ -1,5 +1,5 @@
-const { Photo, Event, Order, OrderItem } = require('../models');
-const { Op, fn, col, literal } = require('sequelize');
+const { Photo, Event, Order, OrderItem, sequelize } = require('../models');
+const { Op, fn, col, literal, QueryTypes } = require('sequelize');
 const rekognitionService = require('../services/rekognition.service');
 const s3Service = require('../services/s3.service');
 const logger = require('../utils/logger');
@@ -191,6 +191,54 @@ class SearchController {
      */
     async getStatistics(req, res, next) {
         try {
+            const isPhotografo = req.userRole === 'fotografo';
+
+            // Fotografo: scope to their own events
+            if (isPhotografo) {
+                const myEvents = await Event.findAll({
+                    where: { createdBy: req.userId },
+                    attributes: ['id'],
+                    raw: true
+                });
+                const eventIds = myEvents.map(e => e.id);
+
+                if (eventIds.length === 0) {
+                    return res.json({
+                        success: true,
+                        data: { totalPhotos: 0, photosWithFaces: 0, totalEvents: 0, totalFaces: 0, totalPhotosSold: 0, totalRevenue: '0.00' }
+                    });
+                }
+
+                const photoWhere = { processingStatus: 'completed', eventId: { [Op.in]: eventIds } };
+
+                const [totalPhotos, photosWithFaces, totalFaces, salesRow] = await Promise.all([
+                    Photo.count({ where: photoWhere }),
+                    Photo.count({ where: { ...photoWhere, faceCount: { [Op.gt]: 0 } } }),
+                    Photo.sum('faceCount', { where: photoWhere }),
+                    sequelize.query(
+                        `SELECT COUNT(oi.id)::int AS photos_sold, COALESCE(SUM(oi.price), 0) AS revenue
+                         FROM order_items oi
+                         INNER JOIN orders o ON o.id = oi."orderId"
+                         INNER JOIN photos p ON p.id = oi."photoId"
+                         WHERE o.status IN ('paid', 'completed') AND p."eventId" IN (:eventIds)`,
+                        { replacements: { eventIds }, type: QueryTypes.SELECT }
+                    )
+                ]);
+
+                return res.json({
+                    success: true,
+                    data: {
+                        totalPhotos,
+                        photosWithFaces,
+                        totalEvents: eventIds.length,
+                        totalFaces: totalFaces || 0,
+                        totalPhotosSold: salesRow[0]?.photos_sold || 0,
+                        totalRevenue: parseFloat(salesRow[0]?.revenue || 0).toFixed(2)
+                    }
+                });
+            }
+
+            // Admin: global stats
             const totalPhotos = await Photo.count({
                 where: { processingStatus: 'completed' }
             });
@@ -249,6 +297,7 @@ class SearchController {
     async getSalesStatistics(req, res, next) {
         try {
             const { period = '12', groupBy = 'month', startDate, endDate } = req.query;
+            const isPhotografo = req.userRole === 'fotografo';
 
             let dateFormat, dateFormatLabel;
             switch (groupBy) {
@@ -267,6 +316,58 @@ class SearchController {
                     break;
             }
 
+            // Fotografo: scope to their own events
+            if (isPhotografo) {
+                const myEvents = await Event.findAll({
+                    where: { createdBy: req.userId },
+                    attributes: ['id'],
+                    raw: true
+                });
+                const eventIds = myEvents.map(e => e.id);
+
+                if (eventIds.length === 0) {
+                    return res.json({ success: true, data: { sales: [], groupBy, period: startDate && endDate ? 'custom' : period } });
+                }
+
+                const months = parseInt(period) || 12;
+                const dateFilter = startDate && endDate
+                    ? `o."paidAt" BETWEEN :startDate AND :endDate`
+                    : `o."paidAt" >= NOW() - INTERVAL '${months} months'`;
+
+                const salesData = await sequelize.query(
+                    `SELECT TO_CHAR(o."paidAt", :dateFormat) AS period,
+                            SUM(oi.price) AS revenue,
+                            COUNT(DISTINCT o.id)::int AS "ordersCount"
+                     FROM order_items oi
+                     INNER JOIN orders o ON o.id = oi."orderId"
+                     INNER JOIN photos p ON p.id = oi."photoId"
+                     WHERE o.status IN ('paid', 'completed')
+                       AND o."paidAt" IS NOT NULL
+                       AND ${dateFilter}
+                       AND p."eventId" IN (:eventIds)
+                     GROUP BY TO_CHAR(o."paidAt", :dateFormat)
+                     ORDER BY TO_CHAR(o."paidAt", :dateFormat) ASC`,
+                    {
+                        replacements: { dateFormat, eventIds, startDate: startDate || null, endDate: endDate || null },
+                        type: QueryTypes.SELECT
+                    }
+                );
+
+                return res.json({
+                    success: true,
+                    data: {
+                        sales: salesData.map(sale => ({
+                            period: sale.period,
+                            revenue: parseFloat(sale.revenue).toFixed(2),
+                            ordersCount: sale.ordersCount
+                        })),
+                        groupBy,
+                        period: startDate && endDate ? 'custom' : period
+                    }
+                });
+            }
+
+            // Admin: global stats
             // Build where clause for date range
             const whereClause = {
                 status: { [Op.in]: ['paid', 'completed'] },
