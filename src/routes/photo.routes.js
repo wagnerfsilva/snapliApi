@@ -16,17 +16,17 @@ const uploadValidation = [
 ];
 
 // Authenticated routes (event admin only)
-router.get('/event/:eventId/gallery', authenticate, authorize('admin'), photoController.getEventPhotosPublic);
+router.get('/event/:eventId/gallery', authenticate, authorize('admin', 'fotografo'), photoController.getEventPhotosPublic);
 
 // Internal Lambda callback (authenticated via x-lambda-secret header, no JWT needed)
 router.post('/lambda-callback', photoController.lambdaCallback);
 
-// Admin-only routes
-router.post('/upload', authenticate, authorize('admin'), uploadMultiple, uploadValidation, validate, photoController.upload);
-router.get('/event/:eventId', authenticate, authorize('admin'), photoController.getByEvent);
-router.get('/:id', authenticate, authorize('admin'), photoController.getById);
-router.get('/:id/download', authenticate, authorize('admin'), photoController.getDownloadUrl);
-router.post('/:id/retry', authenticate, authorize('admin'), photoController.retryProcessing);
-router.delete('/:id', authenticate, authorize('admin'), photoController.delete);
+// Admin/fotografo routes
+router.post('/upload', authenticate, authorize('admin', 'fotografo'), uploadMultiple, uploadValidation, validate, photoController.upload);
+router.get('/event/:eventId', authenticate, authorize('admin', 'fotografo'), photoController.getByEvent);
+router.get('/:id', authenticate, authorize('admin', 'fotografo'), photoController.getById);
+router.get('/:id/download', authenticate, authorize('admin', 'fotografo'), photoController.getDownloadUrl);
+router.post('/:id/retry', authenticate, authorize('admin', 'fotografo'), photoController.retryProcessing);
+router.delete('/:id', authenticate, authorize('admin', 'fotografo'), photoController.delete);
 
 module.exports = router;

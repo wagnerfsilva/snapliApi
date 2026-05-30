@@ -53,7 +53,7 @@ const updateEventValidation = [
 ];
 
 // All routes require authentication and admin role
-router.use(authenticate, authorize('admin'));
+router.use(authenticate, authorize('admin', 'fotografo'));
 
 // Routes
 router.get('/', eventController.getAll);

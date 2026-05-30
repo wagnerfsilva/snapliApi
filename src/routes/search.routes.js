@@ -9,7 +9,7 @@ router.post('/face', optionalAuth, uploadSearchPhoto, searchController.searchByF
 
 // Authenticated routes
 router.get('/event/:eventId', authenticate, searchController.searchByEvent);
-router.get('/statistics', authenticate, authorize('admin'), searchController.getStatistics);
-router.get('/sales-statistics', authenticate, authorize('admin'), searchController.getSalesStatistics);
+router.get('/statistics', authenticate, authorize('admin', 'fotografo'), searchController.getStatistics);
+router.get('/sales-statistics', authenticate, authorize('admin', 'fotografo'), searchController.getSalesStatistics);
 
 module.exports = router;
