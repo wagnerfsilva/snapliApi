@@ -44,6 +44,11 @@ class EventController {
                 if (endDate) where.date[Op.lte] = new Date(endDate);
             }
 
+            // Fotografo only sees events they created
+            if (req.userRole === 'fotografo') {
+                where.createdBy = req.userId;
+            }
+
             const { count, rows: events } = await Event.findAndCountAll({
                 where,
                 limit: safeLimit,
@@ -125,6 +130,14 @@ class EventController {
                 return res.status(404).json({
                     success: false,
                     message: 'Evento não encontrado'
+                });
+            }
+
+            // Fotografo can only access events they created
+            if (req.userRole === 'fotografo' && event.createdBy !== req.userId) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Acesso negado a este evento'
                 });
             }
 
@@ -277,6 +290,14 @@ class EventController {
                 return res.status(404).json({
                     success: false,
                     message: 'Evento não encontrado'
+                });
+            }
+
+            // Fotografo can only access events they created
+            if (req.userRole === 'fotografo' && event.createdBy !== req.userId) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Acesso negado a este evento'
                 });
             }
 
