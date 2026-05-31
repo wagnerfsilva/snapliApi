@@ -326,7 +326,7 @@ class PhotoController {
                 });
             }
 
-            if (!event.isActive) {
+            if (!event.isActive && req.userRole !== 'admin') {
                 return res.status(403).json({
                     success: false,
                     message: 'Evento não está ativo'
