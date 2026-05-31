@@ -318,8 +318,8 @@ class PhotoController {
                 });
             }
 
-            // Verify user is the event owner
-            if (event.createdBy !== req.userId) {
+            // Verify user is the event owner (admins bypass this check)
+            if (req.userRole !== 'admin' && event.createdBy !== req.userId) {
                 return res.status(403).json({
                     success: false,
                     message: 'Acesso negado. Você não é o administrador deste evento.'
