@@ -10,6 +10,7 @@ const admins = [
     { name: 'Lucas',     email: 'lucas@snapli.com.br',     password: 'lucas@snapli.com.br'     },
     { name: 'Felipe',    email: 'felipe@snapli.com.br',    password: 'felipe@snapli.com.br'    },
     { name: 'Cícero',    email: 'cicero@snapli.com.br',    password: 'cicero@snapli.com.br'    },
+    { name: 'Jesus',     email: 'jesus@snapli.com.br',     password: 'jesus@snapli.com.br'     },
 ];
 
 (async () => {
