@@ -42,7 +42,7 @@ module.exports = {
     },
     rekognition: {
         collectionId: process.env.REKOGNITION_COLLECTION_ID,
-        similarityThreshold: parseFloat(process.env.REKOGNITION_SIMILARITY_THRESHOLD) || 80
+        similarityThreshold: parseFloat(process.env.REKOGNITION_SIMILARITY_THRESHOLD) || 92
     },
     isConfigured: hasAwsCredentials
 };

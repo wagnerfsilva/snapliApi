@@ -137,7 +137,7 @@ class SearchController {
                 hasFaces
             } = req.query;
 
-            const safePage  = Math.max(parseInt(page)  || 1,  1);
+            const safePage = Math.max(parseInt(page) || 1, 1);
             const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
             const offset = (safePage - 1) * safeLimit;
 

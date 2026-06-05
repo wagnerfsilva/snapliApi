@@ -35,7 +35,7 @@ class RekognitionService {
      */
     async createCollection(collectionId = null) {
         this._checkAwsConfigured();
-        
+
         try {
             const id = collectionId || rekognition.collectionId;
 
@@ -63,7 +63,7 @@ class RekognitionService {
      */
     async deleteCollection(collectionId = null) {
         this._checkAwsConfigured();
-        
+
         try {
             const id = collectionId || rekognition.collectionId;
 
@@ -85,7 +85,7 @@ class RekognitionService {
      */
     async detectFaces(imageBuffer) {
         this._checkAwsConfigured();
-        
+
         try {
             const command = new DetectFacesCommand({
                 Image: {
@@ -111,7 +111,7 @@ class RekognitionService {
      */
     async indexFaces(imageBuffer, externalImageId) {
         this._checkAwsConfigured();
-        
+
         try {
             const command = new IndexFacesCommand({
                 CollectionId: rekognition.collectionId,
@@ -152,7 +152,7 @@ class RekognitionService {
      */
     async searchFacesByImage(imageBuffer, maxFaces = 100) {
         this._checkAwsConfigured();
-        
+
         try {
             const rekBuffer = imageBuffer.length > 4.5 * 1024 * 1024
                 ? await resizeForRekognition(imageBuffer)
@@ -206,7 +206,7 @@ class RekognitionService {
      */
     async deleteFaces(faceIds) {
         this._checkAwsConfigured();
-        
+
         try {
             if (!faceIds || faceIds.length === 0) {
                 return { deletedFaces: [] };
@@ -235,7 +235,7 @@ class RekognitionService {
      */
     async processPhoto(imageBuffer, photoId) {
         this._checkAwsConfigured();
-        
+
         try {
             // First detect faces
             const detection = await this.detectFaces(imageBuffer);
