@@ -19,7 +19,6 @@ exports.createOrder = async (req, res) => {
         }
 
         // Calculate total amount and validate photos
-        let totalAmount = 0;
         const photoIds = items.map(item => item.photoId);
 
         const photos = await Photo.findAll({
