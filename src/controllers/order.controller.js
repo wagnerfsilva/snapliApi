@@ -35,75 +35,68 @@ exports.createOrder = async (req, res) => {
             return res.status(404).json({ error: 'Algumas fotos não foram encontradas' });
         }
 
-        // Validate all photos are from the same event
-        const eventIds = [...new Set(photos.map(p => p.eventId))];
-        if (eventIds.length > 1) {
-            return res.status(400).json({
-                error: 'Todas as fotos devem ser do mesmo evento'
+        // Group photos by event and calculate price per event group
+        const eventMap = {};
+        photos.forEach(photo => {
+            const evId = photo.eventId;
+            if (!eventMap[evId]) {
+                eventMap[evId] = { event: photo.event, photos: [] };
+            }
+            eventMap[evId].photos.push(photo);
+        });
+
+        let totalAmount = 0;
+        // Map photoId → applied per-photo price for this event group
+        const photoPrice = {};
+
+        for (const evId of Object.keys(eventMap)) {
+            const { event, photos: groupPhotos } = eventMap[evId];
+            const itemCount = groupPhotos.length;
+            const pricePerPhoto = parseFloat(event.pricePerPhoto) || 10;
+            const pricingPackages = event.pricingPackages;
+            const allPhotosPrice = event.allPhotosPrice ? parseFloat(event.allPhotosPrice) : null;
+
+            const priceOptions = [];
+
+            // Option 1: Individual
+            priceOptions.push({ type: 'individual', price: itemCount * pricePerPhoto });
+
+            // Option 2: Package pricing (greedy bin-packing)
+            if (pricingPackages && Array.isArray(pricingPackages) && pricingPackages.length > 0) {
+                const sortedPackages = [...pricingPackages].sort((a, b) => b.quantity - a.quantity);
+                let remaining = itemCount;
+                let packagePrice = 0;
+                for (const pkg of sortedPackages) {
+                    while (remaining >= pkg.quantity) {
+                        packagePrice += parseFloat(pkg.price);
+                        remaining -= pkg.quantity;
+                    }
+                }
+                if (remaining > 0) packagePrice += remaining * pricePerPhoto;
+                priceOptions.push({ type: 'package', price: packagePrice });
+            }
+
+            // Option 3: All photos price ceiling
+            if (allPhotosPrice) {
+                priceOptions.push({ type: 'all', price: allPhotosPrice });
+            }
+
+            const bestOption = priceOptions.reduce((best, cur) => cur.price < best.price ? cur : best);
+            const groupTotal = bestOption.price;
+            const appliedPricePerPhoto = groupTotal / itemCount;
+
+            totalAmount += groupTotal;
+
+            logger.info(`Pricing for event ${event.name}: ${itemCount} photos → ${bestOption.type} = R$${groupTotal.toFixed(2)}`);
+
+            groupPhotos.forEach(photo => {
+                photoPrice[photo.id] = appliedPricePerPhoto;
             });
         }
 
-        const event = photos[0].event;
+        const eventCount = Object.keys(eventMap).length;
 
-        // Calculate price based on event pricing (mirrors frontend cartStore.calculateBestPrice)
-        const itemCount = items.length;
-        const pricePerPhoto = parseFloat(event.pricePerPhoto) || 10;
-        const pricingPackages = event.pricingPackages;
-        const allPhotosPrice = event.allPhotosPrice ? parseFloat(event.allPhotosPrice) : null;
-
-        logger.info(`Calculando preço para ${itemCount} fotos`, {
-            eventId: event.id,
-            eventName: event.name,
-            pricePerPhoto,
-            pricingPackages,
-            allPhotosPrice,
-            photoCount: event.photoCount
-        });
-
-        const priceOptions = [];
-
-        // Option 1: Individual price
-        const individualTotal = itemCount * pricePerPhoto;
-        priceOptions.push({ type: 'individual', price: individualTotal });
-
-        // Option 2: Package pricing (greedy bin-packing, same as frontend)
-        if (pricingPackages && Array.isArray(pricingPackages) && pricingPackages.length > 0) {
-            const sortedPackages = [...pricingPackages].sort((a, b) => b.quantity - a.quantity);
-            let remaining = itemCount;
-            let packagePrice = 0;
-
-            for (const pkg of sortedPackages) {
-                while (remaining >= pkg.quantity) {
-                    packagePrice += parseFloat(pkg.price);
-                    remaining -= pkg.quantity;
-                }
-            }
-
-            if (remaining > 0) {
-                packagePrice += remaining * pricePerPhoto;
-            }
-
-            priceOptions.push({ type: 'package', price: packagePrice });
-        }
-
-        // Option 3: All photos price (acts as price ceiling)
-        if (allPhotosPrice) {
-            priceOptions.push({ type: 'all', price: allPhotosPrice });
-        }
-
-        // Pick the lowest price
-        const bestOption = priceOptions.reduce((best, current) =>
-            current.price < best.price ? current : best
-        );
-        totalAmount = bestOption.price;
-        const appliedPrice = totalAmount / itemCount;
-
-        logger.info(`Opções de preço calculadas`, {
-            options: priceOptions,
-            bestOption: bestOption.type,
-            totalAmount,
-            appliedPricePerItem: appliedPrice
-        });
+        logger.info(`Pedido com ${items.length} foto(s) de ${eventCount} evento(s). Total: R$${totalAmount.toFixed(2)}`);
 
         // Create order
         const orderData = {
@@ -121,7 +114,7 @@ exports.createOrder = async (req, res) => {
                 OrderItem.create({
                     orderId: order.id,
                     photoId: item.photoId,
-                    price: appliedPrice
+                    price: photoPrice[item.photoId] || 0
                 })
             )
         );
@@ -145,7 +138,7 @@ exports.createOrder = async (req, res) => {
                 customerEmail,
                 amount: totalAmount,
                 orderId: order.id,
-                description: `Pedido #${order.id.substring(0, 8)} - ${items.length} foto(s)`
+                description: `Pedido #${order.id.substring(0, 8)} - ${items.length} foto(s)${eventCount > 1 ? ` de ${eventCount} evento(s)` : ''}`
             });
 
             // Salvar dados do pagamento no pedido
