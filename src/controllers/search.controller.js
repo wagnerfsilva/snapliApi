@@ -65,7 +65,7 @@ class SearchController {
                     {
                         model: Event,
                         as: 'event',
-                        attributes: ['id', 'name', 'date', 'location', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice'],
+                        attributes: ['id', 'name', 'date', 'location', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'freePhotosCount'],
                         where: { isActive: true },
                         required: true
                     }

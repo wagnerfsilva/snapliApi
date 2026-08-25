@@ -56,6 +56,16 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             defaultValue: null,
             comment: 'Preço para comprar todas as fotos do evento'
+        },
+        freePhotosCount: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+            defaultValue: 0,
+            validate: {
+                min: 0,
+                max: 3
+            },
+            comment: 'Quantidade de fotos grátis na compra (máx. 3)'
         }
     }, {
         tableName: 'events',

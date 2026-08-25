@@ -2,6 +2,14 @@ const { Event, Photo, User, sequelize } = require('../models');
 const { Op, literal } = require('sequelize');
 const logger = require('../utils/logger');
 
+// Clampa entre 0 e 3; preserva undefined para não sobrescrever em updates parciais
+function clampFreePhotosCount(value) {
+    if (value === undefined) return undefined;
+    const parsed = parseInt(value, 10);
+    if (Number.isNaN(parsed)) return 0;
+    return Math.min(Math.max(parsed, 0), 3);
+}
+
 class EventController {
     /**
      * Get all events with pagination and filters
@@ -162,7 +170,8 @@ class EventController {
                 location,
                 pricePerPhoto,
                 pricingPackages,
-                allPhotosPrice
+                allPhotosPrice,
+                freePhotosCount
             } = req.body;
             const createdBy = req.userId;
 
@@ -174,7 +183,8 @@ class EventController {
                 createdBy,
                 pricePerPhoto,
                 pricingPackages,
-                allPhotosPrice
+                allPhotosPrice,
+                freePhotosCount: clampFreePhotosCount(freePhotosCount)
             });
 
             logger.info(`Evento criado: ${event.id} - ${event.name}`);
@@ -203,7 +213,8 @@ class EventController {
                 isActive,
                 pricePerPhoto,
                 pricingPackages,
-                allPhotosPrice
+                allPhotosPrice,
+                freePhotosCount
             } = req.body;
 
             const event = await Event.findByPk(id);
@@ -223,7 +234,8 @@ class EventController {
                 isActive,
                 pricePerPhoto,
                 pricingPackages,
-                allPhotosPrice
+                allPhotosPrice,
+                freePhotosCount: clampFreePhotosCount(freePhotosCount)
             });
 
             logger.info(`Evento atualizado: ${event.id} - ${event.name}`);

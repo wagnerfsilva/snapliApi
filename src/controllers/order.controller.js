@@ -26,7 +26,7 @@ exports.createOrder = async (req, res) => {
             include: [{
                 model: Event,
                 as: 'event',
-                attributes: ['id', 'name', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'photoCount']
+                attributes: ['id', 'name', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'photoCount', 'freePhotosCount']
             }]
         });
 
@@ -34,9 +34,16 @@ exports.createOrder = async (req, res) => {
             return res.status(404).json({ error: 'Algumas fotos não foram encontradas' });
         }
 
-        // Group photos by event and calculate price per event group
-        const eventMap = {};
+        // Group photos by event, preservando a ordem original de `items` (define quais fotos ficam grátis)
+        const photoById = {};
         photos.forEach(photo => {
+            photoById[photo.id] = photo;
+        });
+
+        const eventMap = {};
+        items.forEach(item => {
+            const photo = photoById[item.photoId];
+            if (!photo) return;
             const evId = photo.eventId;
             if (!eventMap[evId]) {
                 eventMap[evId] = { event: photo.event, photos: [] };
@@ -55,15 +62,19 @@ exports.createOrder = async (req, res) => {
             const pricingPackages = event.pricingPackages;
             const allPhotosPrice = event.allPhotosPrice ? parseFloat(event.allPhotosPrice) : null;
 
+            // Fotos grátis: não entram no cálculo de pacotes/individual, sempre sobra ao menos 1 foto paga
+            const freeCount = Math.max(0, Math.min(event.freePhotosCount || 0, itemCount - 1));
+            const paidCount = itemCount - freeCount;
+
             const priceOptions = [];
 
             // Option 1: Individual
-            priceOptions.push({ type: 'individual', price: itemCount * pricePerPhoto });
+            priceOptions.push({ type: 'individual', price: paidCount * pricePerPhoto });
 
             // Option 2: Package pricing (greedy bin-packing)
             if (pricingPackages && Array.isArray(pricingPackages) && pricingPackages.length > 0) {
                 const sortedPackages = [...pricingPackages].sort((a, b) => b.quantity - a.quantity);
-                let remaining = itemCount;
+                let remaining = paidCount;
                 let packagePrice = 0;
                 for (const pkg of sortedPackages) {
                     while (remaining >= pkg.quantity) {
@@ -82,14 +93,14 @@ exports.createOrder = async (req, res) => {
 
             const bestOption = priceOptions.reduce((best, cur) => cur.price < best.price ? cur : best);
             const groupTotal = bestOption.price;
-            const appliedPricePerPhoto = groupTotal / itemCount;
+            const appliedPricePerPhoto = groupTotal / paidCount;
 
             totalAmount += groupTotal;
 
-            logger.info(`Pricing for event ${event.name}: ${itemCount} photos → ${bestOption.type} = R$${groupTotal.toFixed(2)}`);
+            logger.info(`Pricing for event ${event.name}: ${itemCount} photos (${freeCount} grátis) → ${bestOption.type} = R$${groupTotal.toFixed(2)}`);
 
-            groupPhotos.forEach(photo => {
-                photoPrice[photo.id] = appliedPricePerPhoto;
+            groupPhotos.forEach((photo, index) => {
+                photoPrice[photo.id] = index < freeCount ? 0 : appliedPricePerPhoto;
             });
         }
 
