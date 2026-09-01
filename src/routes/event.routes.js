@@ -24,7 +24,15 @@ const createEventValidation = [
     body('location')
         .optional()
         .isLength({ max: 255 })
-        .withMessage('Localização deve ter no máximo 255 caracteres')
+        .withMessage('Localização deve ter no máximo 255 caracteres'),
+    body('organizerId')
+        .optional({ nullable: true })
+        .isUUID()
+        .withMessage('organizerId inválido'),
+    body('organizerCommissionPercentage')
+        .optional({ nullable: true })
+        .isFloat({ min: 0, max: 100 })
+        .withMessage('Comissão deve ser entre 0 e 100')
 ];
 
 const updateEventValidation = [
@@ -49,18 +57,28 @@ const updateEventValidation = [
     body('isActive')
         .optional()
         .isBoolean()
-        .withMessage('isActive deve ser booleano')
+        .withMessage('isActive deve ser booleano'),
+    body('organizerId')
+        .optional({ nullable: true })
+        .isUUID()
+        .withMessage('organizerId inválido'),
+    body('organizerCommissionPercentage')
+        .optional({ nullable: true })
+        .isFloat({ min: 0, max: 100 })
+        .withMessage('Comissão deve ser entre 0 e 100')
 ];
 
-// All routes require authentication and admin role
-router.use(authenticate, authorize('admin', 'fotografo'));
+// All routes require authentication
+router.use(authenticate);
 
-// Routes
-router.get('/', eventController.getAll);
-router.get('/:id', eventController.getById);
-router.get('/:id/statistics', eventController.getStatistics);
-router.post('/', createEventValidation, validate, eventController.create);
-router.put('/:id', updateEventValidation, validate, eventController.update);
-router.delete('/:id', eventController.delete);
+// Read routes — admin, fotografo and organizador (own events, filtered in controller)
+router.get('/', authorize('admin', 'fotografo', 'organizador'), eventController.getAll);
+router.get('/:id', authorize('admin', 'fotografo', 'organizador'), eventController.getById);
+router.get('/:id/statistics', authorize('admin', 'fotografo', 'organizador'), eventController.getStatistics);
+
+// Write routes — admin and fotografo only (organizador never creates/edits events)
+router.post('/', authorize('admin', 'fotografo'), createEventValidation, validate, eventController.create);
+router.put('/:id', authorize('admin', 'fotografo'), updateEventValidation, validate, eventController.update);
+router.delete('/:id', authorize('admin', 'fotografo'), eventController.delete);
 
 module.exports = router;

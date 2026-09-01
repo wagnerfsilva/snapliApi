@@ -26,7 +26,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         role: {
-            type: DataTypes.ENUM('admin', 'fotografo'),
+            type: DataTypes.ENUM('admin', 'fotografo', 'organizador'),
             defaultValue: 'fotografo',
             allowNull: false
         },
@@ -78,6 +78,24 @@ module.exports = (sequelize, DataTypes) => {
         User.hasMany(models.Order, {
             foreignKey: 'userId',
             as: 'orders'
+        });
+
+        // User (organizador) can be assigned to multiple events
+        User.hasMany(models.Event, {
+            foreignKey: 'organizerId',
+            as: 'organizedEvents'
+        });
+
+        // User (organizador) can have multiple withdrawal requests
+        User.hasMany(models.WithdrawalRequest, {
+            foreignKey: 'organizerId',
+            as: 'withdrawalRequests'
+        });
+
+        // User (admin) can have processed multiple withdrawal requests
+        User.hasMany(models.WithdrawalRequest, {
+            foreignKey: 'processedBy',
+            as: 'processedWithdrawalRequests'
         });
     };
 

@@ -10,6 +10,18 @@ function clampFreePhotosCount(value) {
     return Math.min(Math.max(parsed, 0), 3);
 }
 
+// Returns an error message if organizerId doesn't reference an active organizador, otherwise null
+async function validateOrganizer(organizerId) {
+    const organizer = await User.findByPk(organizerId);
+    if (!organizer || organizer.role !== 'organizador') {
+        return 'organizerId deve referenciar um usuário com role organizador';
+    }
+    if (!organizer.isActive) {
+        return 'Organizador está inativo';
+    }
+    return null;
+}
+
 class EventController {
     /**
      * Get all events with pagination and filters
@@ -57,6 +69,11 @@ class EventController {
                 where.createdBy = req.userId;
             }
 
+            // Organizador only sees events they're assigned to
+            if (req.userRole === 'organizador') {
+                where.organizerId = req.userId;
+            }
+
             const { count, rows: events } = await Event.findAndCountAll({
                 where,
                 limit: safeLimit,
@@ -96,6 +113,11 @@ class EventController {
                         model: User,
                         as: 'creator',
                         attributes: ['id', 'name', 'email']
+                    },
+                    {
+                        model: User,
+                        as: 'organizer',
+                        attributes: ['id', 'name', 'email']
                     }
                 ]
             });
@@ -130,6 +152,11 @@ class EventController {
                         model: User,
                         as: 'creator',
                         attributes: ['id', 'name', 'email']
+                    },
+                    {
+                        model: User,
+                        as: 'organizer',
+                        attributes: ['id', 'name', 'email']
                     }
                 ]
             });
@@ -143,6 +170,14 @@ class EventController {
 
             // Fotografo can only access events they created
             if (req.userRole === 'fotografo' && event.createdBy !== req.userId) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Acesso negado a este evento'
+                });
+            }
+
+            // Organizador can only access events they're assigned to
+            if (req.userRole === 'organizador' && event.organizerId !== req.userId) {
                 return res.status(403).json({
                     success: false,
                     message: 'Acesso negado a este evento'
@@ -171,9 +206,18 @@ class EventController {
                 pricePerPhoto,
                 pricingPackages,
                 allPhotosPrice,
-                freePhotosCount
+                freePhotosCount,
+                organizerId,
+                organizerCommissionPercentage
             } = req.body;
             const createdBy = req.userId;
+
+            if (organizerId) {
+                const organizerError = await validateOrganizer(organizerId);
+                if (organizerError) {
+                    return res.status(400).json({ success: false, message: organizerError });
+                }
+            }
 
             const event = await Event.create({
                 name,
@@ -184,7 +228,9 @@ class EventController {
                 pricePerPhoto,
                 pricingPackages,
                 allPhotosPrice,
-                freePhotosCount: clampFreePhotosCount(freePhotosCount)
+                freePhotosCount: clampFreePhotosCount(freePhotosCount),
+                organizerId: organizerId || null,
+                organizerCommissionPercentage: organizerId ? organizerCommissionPercentage : null
             });
 
             logger.info(`Evento criado: ${event.id} - ${event.name}`);
@@ -214,7 +260,9 @@ class EventController {
                 pricePerPhoto,
                 pricingPackages,
                 allPhotosPrice,
-                freePhotosCount
+                freePhotosCount,
+                organizerId,
+                organizerCommissionPercentage
             } = req.body;
 
             const event = await Event.findByPk(id);
@@ -226,7 +274,7 @@ class EventController {
                 });
             }
 
-            await event.update({
+            const updateData = {
                 name,
                 date,
                 description,
@@ -236,7 +284,24 @@ class EventController {
                 pricingPackages,
                 allPhotosPrice,
                 freePhotosCount: clampFreePhotosCount(freePhotosCount)
-            });
+            };
+
+            // organizerId/organizerCommissionPercentage only touched when explicitly sent,
+            // so partial updates that omit them don't accidentally clear the organizer
+            if (organizerId !== undefined) {
+                if (organizerId) {
+                    const organizerError = await validateOrganizer(organizerId);
+                    if (organizerError) {
+                        return res.status(400).json({ success: false, message: organizerError });
+                    }
+                }
+                updateData.organizerId = organizerId || null;
+                updateData.organizerCommissionPercentage = organizerId ? organizerCommissionPercentage : null;
+            } else if (organizerCommissionPercentage !== undefined) {
+                updateData.organizerCommissionPercentage = organizerCommissionPercentage;
+            }
+
+            await event.update(updateData);
 
             logger.info(`Evento atualizado: ${event.id} - ${event.name}`);
 
@@ -307,6 +372,14 @@ class EventController {
 
             // Fotografo can only access events they created
             if (req.userRole === 'fotografo' && event.createdBy !== req.userId) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Acesso negado a este evento'
+                });
+            }
+
+            // Organizador can only access events they're assigned to
+            if (req.userRole === 'organizador' && event.organizerId !== req.userId) {
                 return res.status(403).json({
                     success: false,
                     message: 'Acesso negado a este evento'

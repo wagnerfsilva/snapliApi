@@ -8,6 +8,8 @@ const photoRoutes = require('./photo.routes');
 const searchRoutes = require('./search.routes');
 const downloadRoutes = require('./download.routes');
 const orderRoutes = require('./order.routes');
+const userRoutes = require('./user.routes');
+const withdrawalRoutes = require('./withdrawal.routes');
 
 // Health check
 router.get('/health', (req, res) => {
@@ -31,5 +33,7 @@ router.use('/photos', photoRoutes);
 router.use('/search', searchRoutes);
 router.use('/orders', orderRoutes);
 router.use('/downloads', downloadRoutes);
+router.use('/users', userRoutes);
+router.use('/withdrawals', withdrawalRoutes);
 
 module.exports = router;

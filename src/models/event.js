@@ -66,6 +66,25 @@ module.exports = (sequelize, DataTypes) => {
                 max: 3
             },
             comment: 'Quantidade de fotos grátis na compra (máx. 3)'
+        },
+        organizerId: {
+            type: DataTypes.UUID,
+            allowNull: true,
+            references: {
+                model: 'users',
+                key: 'id'
+            },
+            comment: 'Organizador (role organizador) vinculado ao evento, para cálculo de comissão'
+        },
+        organizerCommissionPercentage: {
+            type: DataTypes.DECIMAL(5, 2),
+            allowNull: true,
+            defaultValue: null,
+            validate: {
+                min: 0,
+                max: 100
+            },
+            comment: 'Percentual de comissão do organizador sobre o valor bruto vendido do evento'
         }
     }, {
         tableName: 'events',
@@ -87,10 +106,23 @@ module.exports = (sequelize, DataTypes) => {
             as: 'creator'
         });
 
+        // Event belongs to a User (organizador)
+        Event.belongsTo(models.User, {
+            foreignKey: 'organizerId',
+            as: 'organizer'
+        });
+
         // Event has many Photos
         Event.hasMany(models.Photo, {
             foreignKey: 'eventId',
             as: 'photos',
+            onDelete: 'CASCADE'
+        });
+
+        // Event has many WithdrawalRequests
+        Event.hasMany(models.WithdrawalRequest, {
+            foreignKey: 'eventId',
+            as: 'withdrawalRequests',
             onDelete: 'CASCADE'
         });
     };

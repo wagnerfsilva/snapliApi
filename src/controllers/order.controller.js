@@ -681,6 +681,12 @@ exports.listOrdersByEvent = async (req, res) => {
     try {
         const { eventId } = req.params;
 
+        // Organizador não deve ver detalhes de pedidos/compradores (PII) — apenas
+        // agregados via /withdrawals/balance/:eventId. admin/fotografo mantidos como já eram.
+        if (req.userRole === 'organizador') {
+            return res.status(403).json({ error: 'Acesso negado' });
+        }
+
         const orders = await Order.findAll({
             include: [{
                 model: OrderItem,
