@@ -105,6 +105,15 @@ class EventController {
                                 AND o.status IN ('paid', 'completed')
                             )`),
                             'paidOrdersCount'
+                        ],
+                        [
+                            literal(`(
+                                SELECT COALESCE(SUM(wr.amount), 0)
+                                FROM withdrawal_requests wr
+                                WHERE wr."eventId" = "Event"."id"
+                                AND wr.status IN ('pending', 'approved', 'paid')
+                            )`),
+                            'requestedAmount'
                         ]
                     ]
                 },

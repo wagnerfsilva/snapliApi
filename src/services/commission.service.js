@@ -15,16 +15,17 @@ async function getEventSalesSummary(eventId) {
     const [row] = await sequelize.query(
         `
         SELECT
-            COUNT(DISTINCT sub."orderId") AS "totalOrders",
+            COUNT(*) AS "totalOrders",
             COALESCE(SUM(sub."totalAmount"), 0) AS "totalRevenue",
-            COALESCE(COUNT(sub."orderItemId"), 0) AS "totalPhotosSold"
+            COALESCE(SUM(sub."itemCount"), 0) AS "totalPhotosSold"
         FROM (
-            SELECT DISTINCT o.id AS "orderId", o."totalAmount", oi.id AS "orderItemId"
+            SELECT o.id AS "orderId", o."totalAmount", COUNT(oi.id) AS "itemCount"
             FROM orders o
             INNER JOIN order_items oi ON oi."orderId" = o.id
             INNER JOIN photos p ON p.id = oi."photoId"
             WHERE p."eventId" = :eventId
             AND o.status IN ('paid', 'completed')
+            GROUP BY o.id, o."totalAmount"
         ) sub
         `,
         { replacements: { eventId }, type: QueryTypes.SELECT }
