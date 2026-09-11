@@ -27,7 +27,29 @@ const createUserValidation = [
         .withMessage('Senha deve ter no mínimo 6 caracteres'),
     body('role')
         .isIn(['fotografo', 'organizador'])
-        .withMessage('Role deve ser fotografo ou organizador')
+        .withMessage('Role deve ser fotografo ou organizador'),
+    body('pixKey')
+        .optional({ nullable: true, checkFalsy: true })
+        .isLength({ max: 255 })
+        .withMessage('Chave PIX deve ter no máximo 255 caracteres')
+];
+
+const updateUserValidation = [
+    body('name')
+        .optional()
+        .notEmpty()
+        .withMessage('Nome é obrigatório')
+        .isLength({ max: 255 })
+        .withMessage('Nome deve ter no máximo 255 caracteres'),
+    body('email')
+        .optional()
+        .isEmail()
+        .withMessage('Email inválido')
+        .normalizeEmail(),
+    body('pixKey')
+        .optional({ nullable: true, checkFalsy: true })
+        .isLength({ max: 255 })
+        .withMessage('Chave PIX deve ter no máximo 255 caracteres')
 ];
 
 router.use(authenticate);
@@ -39,6 +61,7 @@ router.get('/search-organizers', authorize('admin', 'fotografo'), searchOrganize
 router.use(authorize('admin'));
 router.get('/', userController.getAll);
 router.post('/', createUserValidation, validate, userController.create);
+router.patch('/:id', updateUserValidation, validate, userController.update);
 router.patch('/:id/toggle-active', userController.toggleActive);
 
 module.exports = router;

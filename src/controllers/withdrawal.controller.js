@@ -65,6 +65,14 @@ class WithdrawalController {
                 });
             }
 
+            const organizer = await User.findByPk(req.userId);
+            if (!organizer?.pixKey) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Cadastre sua chave PIX antes de solicitar um resgate'
+                });
+            }
+
             const hasOpenRequest = await commissionService.hasOpenWithdrawalRequest(eventId);
             if (hasOpenRequest) {
                 return res.status(400).json({
@@ -88,6 +96,7 @@ class WithdrawalController {
                 organizerId: req.userId,
                 amount: requestedAmount,
                 notes,
+                pixKey: organizer.pixKey,
                 status: 'pending'
             });
 
@@ -126,7 +135,7 @@ class WithdrawalController {
                     {
                         model: User,
                         as: 'organizer',
-                        attributes: ['id', 'name', 'email']
+                        attributes: ['id', 'name', 'email', 'pixKey']
                     }
                 ],
                 order: [['createdAt', 'DESC']]

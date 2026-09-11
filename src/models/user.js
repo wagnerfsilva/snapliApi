@@ -37,6 +37,11 @@ module.exports = (sequelize, DataTypes) => {
         lastLogin: {
             type: DataTypes.DATE,
             allowNull: true
+        },
+        pixKey: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            comment: 'Chave PIX do organizador, usada para pagamento dos resgates'
         }
     }, {
         tableName: 'users',

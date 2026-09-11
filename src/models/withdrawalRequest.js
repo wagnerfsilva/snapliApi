@@ -37,6 +37,11 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
             comment: 'Observação do organizador ao solicitar o resgate'
         },
+        pixKey: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            comment: 'Cópia da chave PIX do organizador no momento da solicitação de resgate'
+        },
         adminNotes: {
             type: DataTypes.TEXT,
             allowNull: true,

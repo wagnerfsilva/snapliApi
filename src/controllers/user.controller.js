@@ -20,7 +20,7 @@ class UserController {
 
             const users = await User.findAll({
                 where,
-                attributes: ['id', 'name', 'email', 'role', 'isActive', 'lastLogin', 'createdAt'],
+                attributes: ['id', 'name', 'email', 'role', 'isActive', 'lastLogin', 'createdAt', 'pixKey'],
                 order: [['name', 'ASC']]
             });
 
@@ -70,7 +70,7 @@ class UserController {
      */
     async create(req, res, next) {
         try {
-            const { name, email, password, role } = req.body;
+            const { name, email, password, role, pixKey } = req.body;
 
             if (!CREATABLE_ROLES.includes(role)) {
                 return res.status(400).json({
@@ -87,13 +87,58 @@ class UserController {
                 });
             }
 
-            const user = await User.create({ name, email, password, role, isActive: true });
+            const user = await User.create({ name, email, password, role, isActive: true, pixKey: pixKey || null });
 
             logger.info(`Usuário criado: ${user.id} - ${user.email} (${user.role})`);
 
             res.status(201).json({
                 success: true,
                 message: 'Usuário criado com sucesso',
+                data: { user: user.toJSON() }
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * Update name/email/pixKey of a user (admin-only). Password and role are not
+     * editable through this endpoint.
+     */
+    async update(req, res, next) {
+        try {
+            const { id } = req.params;
+            const { name, email, pixKey } = req.body;
+
+            const user = await User.findByPk(id);
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Usuário não encontrado'
+                });
+            }
+
+            if (email && email !== user.email) {
+                const existing = await User.findOne({ where: { email } });
+                if (existing) {
+                    return res.status(409).json({
+                        success: false,
+                        message: 'Já existe um usuário com este email'
+                    });
+                }
+            }
+
+            await user.update({
+                name: name ?? user.name,
+                email: email ?? user.email,
+                pixKey: pixKey === undefined ? user.pixKey : (pixKey || null)
+            });
+
+            logger.info(`Usuário atualizado: ${user.id} - ${user.email}`);
+
+            res.json({
+                success: true,
+                message: 'Usuário atualizado com sucesso',
                 data: { user: user.toJSON() }
             });
         } catch (error) {
