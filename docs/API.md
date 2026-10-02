@@ -102,7 +102,9 @@ Face IDs map to video, timestamp and processing version in `media_faces`. Search
 deduplicates videos, retaining maximum similarity and matched timestamps. It does
 not guarantee independent-selfie accuracy or complete recall: faces need to be
 detectable in sampled frames and AWS returns at most 4096 face matches per search.
-Customers receive only the marked H.264/AAC SDR MP4 and marked poster before payment.
+Before payment, customers receive only the marked poster and video type/duration;
+public search responses do not include a video playback URL. Video previews are
+available only in authenticated administrative views and in the paid download portal.
 Original MOV/MP4 URLs use the existing paid, unexpired, order-bound download token.
 
 Active processing and purchased videos cannot be deleted. Indexed face removal

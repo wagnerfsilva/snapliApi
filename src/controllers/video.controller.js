@@ -102,7 +102,7 @@ exports.status = async (req, res, next) => {
         res.json({ success: true, data: {
             id: photo.id, uploadStatus: photo.uploadStatus, processingStatus: photo.processingStatus,
             processingError: photo.processingError, faceCount: photo.faceCount,
-            ...(photo.processingStatus === 'completed' ? await previewUrls(photo) : {})
+            ...(photo.processingStatus === 'completed' ? await previewUrls(photo, { includeVideoPreview: true }) : {})
         } });
     } catch (error) { next(error); }
 };

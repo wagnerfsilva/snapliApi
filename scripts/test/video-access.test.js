@@ -17,6 +17,7 @@ jest.mock('../../src/utils/logger', () => ({ error: jest.fn() }));
 const { Photo, Event, Order, sequelize } = require('../../src/models');
 const uploads = require('../../src/services/video-upload.service');
 const storage = require('../../src/services/s3.service');
+const { previewUrls } = require('../../src/services/media-preview.service');
 const video = require('../../src/controllers/video.controller');
 const photos = require('../../src/controllers/photo.controller');
 const download = require('../../src/controllers/download.controller');
@@ -99,4 +100,18 @@ test('unknown token or media never signs an original', async () => {
     await download.downloadPhoto(request, response);
     expect(response.status).toHaveBeenCalledWith(404);
     expect(storage.generatePresignedUrl).not.toHaveBeenCalled();
+});
+
+test.each([['pending', null, 403], ['paid', new Date(0), 410]])('portal does not expose video playback for %s / expiry %s', async (status, downloadExpiresAt, expected) => {
+    Order.findOne.mockResolvedValue({ status, downloadExpiresAt });
+    await download.getOrderByToken(request, response);
+    expect(response.status).toHaveBeenCalledWith(expected);
+    expect(previewUrls).not.toHaveBeenCalled();
+});
+
+test('paid portal opts in to video playback only after checking payment and expiry', async () => {
+    Order.findOne.mockResolvedValue({ status: 'paid', downloadExpiresAt: new Date(Date.now() + 60000), items: [{ photo: { id: 'video', mediaType: 'video' } }] });
+    await download.getOrderByToken(request, response);
+    expect(previewUrls).toHaveBeenCalledWith(expect.objectContaining({ id: 'video' }), { includeVideoPreview: true });
+    expect(response.json.mock.calls[0][0].photos[0].previewUrl).toBe('marked-preview');
 });

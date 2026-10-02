@@ -105,7 +105,7 @@ exports.getOrderByToken = async (req, res) => {
         // Format response
         const photos = await Promise.all(order.items.map(async (item) => {
             // Generate presigned URL for watermarked preview
-            const urls = await previewUrls(item.photo);
+            const urls = await previewUrls(item.photo, { includeVideoPreview: true });
 
             return {
                 id: item.photo.id,

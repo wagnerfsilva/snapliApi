@@ -9,6 +9,7 @@ const { Photo, MediaFace } = require('../../src/models');
 const rekognition = require('../../src/services/rekognition.service');
 const s3 = require('../../src/services/s3.service');
 const controller = require('../../src/controllers/search.controller');
+const { previewUrls } = require('../../src/services/media-preview.service');
 
 const video = { id: 'video', mediaType: 'video', processingVersion: 1, previewKey: 'marked.mp4', thumbnailKey: 'poster.jpg', event: { videoEnabled: true } };
 
@@ -35,9 +36,22 @@ test('same collection matches yield one video, highest similarity and timestamps
     const result = await search();
     expect(rekognition.searchFacesByImage).toHaveBeenCalledTimes(1);
     expect(result.photos).toHaveLength(1);
-    expect(result.photos[0]).toMatchObject({ mediaType: 'video', similarity: 99, matchedTimestampsMs: [1000, 2000], previewUrl: 'signed:marked.mp4' });
+    expect(result.photos[0]).toMatchObject({ mediaType: 'video', similarity: 99, matchedTimestampsMs: [1000, 2000], thumbnailUrl: 'signed:poster.jpg', watermarkedUrl: 'signed:poster.jpg' });
+    expect(result.photos[0]).not.toHaveProperty('previewUrl');
+    expect(s3.generatePresignedUrl).toHaveBeenCalledTimes(1);
+    expect(s3.generatePresignedUrl).not.toHaveBeenCalledWith('marked.mp4', expect.anything(), expect.anything());
     expect(s3.generatePresignedUrl.mock.calls.every(call => call[1] === 'watermarked')).toBe(true);
     expect(result.photos[0]).not.toHaveProperty('originalKey');
+});
+
+test('video previews are omitted by default and require an explicit protected-context opt-in', async () => {
+    const publicUrls = await previewUrls(video);
+    expect(publicUrls).not.toHaveProperty('previewUrl');
+    expect(s3.generatePresignedUrl).toHaveBeenCalledTimes(1);
+    s3.generatePresignedUrl.mockClear();
+    const protectedUrls = await previewUrls(video, { includeVideoPreview: true });
+    expect(protectedUrls.previewUrl).toBe('signed:marked.mp4');
+    expect(s3.generatePresignedUrl).toHaveBeenCalledWith('marked.mp4', 'watermarked', 3600);
 });
 
 test.each([

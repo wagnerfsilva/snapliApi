@@ -136,7 +136,7 @@ class PhotoController {
                 const data = photo.toJSON();
                 return {
                     ...data,
-                    ...(await previewUrls(photo))
+                    ...(await previewUrls(photo, { includeVideoPreview: true }))
                 };
             }));
 
@@ -183,7 +183,7 @@ class PhotoController {
 
             const photoData = {
                 ...photo.toJSON(),
-                ...(await previewUrls(photo))
+                ...(await previewUrls(photo, { includeVideoPreview: true }))
             };
 
             res.json({
@@ -381,7 +381,7 @@ class PhotoController {
                 originalFilename: photo.originalFilename,
                 processingStatus: photo.processingStatus,
                 processingError: photo.processingError,
-                ...(await previewUrls(photo))
+                ...(await previewUrls(photo, { includeVideoPreview: true }))
             })));
 
             res.json({
