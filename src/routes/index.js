@@ -10,6 +10,7 @@ const downloadRoutes = require('./download.routes');
 const orderRoutes = require('./order.routes');
 const userRoutes = require('./user.routes');
 const withdrawalRoutes = require('./withdrawal.routes');
+const videoRoutes = require('./video.routes');
 
 // Health check
 router.get('/health', (req, res) => {
@@ -19,6 +20,8 @@ router.get('/health', (req, res) => {
         message: 'API is running',
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV,
+        revision: process.env.RAILWAY_GIT_COMMIT_SHA || null,
+        video: { ready: require('../services/video-worker.service').isReady(), maxBytes: 500 * 1024 * 1024, maxSeconds: 120 },
         asaas: {
             configured: !!asaasKey,
             environment: process.env.ASAAS_ENVIRONMENT || 'NOT SET'
@@ -30,6 +33,7 @@ router.get('/health', (req, res) => {
 router.use('/auth', authRoutes);
 router.use('/events', eventRoutes);
 router.use('/photos', photoRoutes);
+router.use('/videos', videoRoutes);
 router.use('/search', searchRoutes);
 router.use('/orders', orderRoutes);
 router.use('/downloads', downloadRoutes);

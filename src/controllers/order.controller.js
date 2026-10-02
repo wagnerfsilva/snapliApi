@@ -3,6 +3,7 @@ const emailService = require('../services/email.service');
 const pixService = require('../services/pix.service');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
+const { quoteVideos } = require('../services/video-pricing.service');
 
 /**
  * Create new order
@@ -12,26 +13,36 @@ exports.createOrder = async (req, res) => {
         const { customerName, customerEmail, items } = req.body;
 
         // Validations
-        if (!customerName || !customerEmail || !items || items.length === 0) {
+        if (!customerName || !customerEmail || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
                 error: 'Nome, email e itens são obrigatórios'
             });
         }
 
         // Calculate total amount and validate photos
-        const photoIds = items.map(item => item.photoId);
+        const photoIds = items.map(item => item?.photoId);
+
+        if (items.length > 1000 || new Set(photoIds).size !== items.length || photoIds.some(id => typeof id !== 'string')) {
+            return res.status(400).json({ error: 'Itens invalidos ou duplicados no pedido' });
+        }
 
         const photos = await Photo.findAll({
             where: { id: photoIds },
             include: [{
                 model: Event,
                 as: 'event',
-                attributes: ['id', 'name', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'photoCount', 'freePhotosCount']
+                attributes: ['id', 'name', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'photoCount', 'freePhotosCount', 'isActive', 'videoEnabled', 'pricePerVideo', 'videoPricingPackages', 'allVideosPrice']
             }]
         });
 
         if (photos.length !== items.length) {
             return res.status(404).json({ error: 'Algumas fotos não foram encontradas' });
+        }
+
+        for (const photo of photos) {
+            if (photo.mediaType === 'video' && (photo.processingStatus !== 'completed' || !photo.previewKey || !photo.event?.isActive)) {
+                return res.status(400).json({ error: 'Video indisponivel para compra' });
+            }
         }
 
         // Group photos by event, preservando a ordem original de `items` (define quais fotos ficam grátis)
@@ -44,7 +55,7 @@ exports.createOrder = async (req, res) => {
         items.forEach(item => {
             const photo = photoById[item.photoId];
             if (!photo) return;
-            const evId = photo.eventId;
+            const evId = `${photo.eventId}:${photo.mediaType || 'photo'}`;
             if (!eventMap[evId]) {
                 eventMap[evId] = { event: photo.event, photos: [] };
             }
@@ -58,6 +69,19 @@ exports.createOrder = async (req, res) => {
         for (const evId of Object.keys(eventMap)) {
             const { event, photos: groupPhotos } = eventMap[evId];
             const itemCount = groupPhotos.length;
+            if (groupPhotos[0].mediaType === 'video') {
+                let quote;
+                try {
+                    quote = quoteVideos(itemCount, event);
+                } catch (error) {
+                    return res.status(400).json({ error: error.message });
+                }
+                totalAmount += quote.total;
+                groupPhotos.forEach((photo, index) => {
+                    photoPrice[photo.id] = quote.itemPrices[index];
+                });
+                continue;
+            }
             const pricePerPhoto = parseFloat(event.pricePerPhoto) || 10;
             const pricingPackages = event.pricingPackages;
             const allPhotosPrice = event.allPhotosPrice ? parseFloat(event.allPhotosPrice) : null;
@@ -104,7 +128,8 @@ exports.createOrder = async (req, res) => {
             });
         }
 
-        const eventCount = Object.keys(eventMap).length;
+        const eventCount = new Set(photos.map(photo => photo.eventId)).size;
+        totalAmount = Math.round(totalAmount * 100) / 100;
 
         logger.info(`Pedido com ${items.length} foto(s) de ${eventCount} evento(s). Total: R$${totalAmount.toFixed(2)}`);
 
@@ -148,7 +173,7 @@ exports.createOrder = async (req, res) => {
                 customerEmail,
                 amount: totalAmount,
                 orderId: order.id,
-                description: `Pedido #${order.id.substring(0, 8)} - ${items.length} foto(s)${eventCount > 1 ? ` de ${eventCount} evento(s)` : ''}`
+                description: `Pedido #${order.id.substring(0, 8)} - ${items.length} arquivo(s)${eventCount > 1 ? ` de ${eventCount} evento(s)` : ''}`
             });
 
             // Salvar dados do pagamento no pedido

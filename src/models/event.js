@@ -67,6 +67,28 @@ module.exports = (sequelize, DataTypes) => {
             },
             comment: 'Quantidade de fotos grátis na compra (máx. 3)'
         },
+        videoEnabled: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
+        },
+        videoCount: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 0
+        },
+        pricePerVideo: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true
+        },
+        videoPricingPackages: {
+            type: DataTypes.JSON,
+            allowNull: true
+        },
+        allVideosPrice: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true
+        },
         organizerId: {
             type: DataTypes.UUID,
             allowNull: true,

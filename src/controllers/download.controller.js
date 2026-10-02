@@ -3,6 +3,7 @@ const s3Service = require('../services/s3.service');
 const emailService = require('../services/email.service');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
+const { previewUrls } = require('../services/media-preview.service');
 
 /**
  * Generate download token for paid order
@@ -104,11 +105,7 @@ exports.getOrderByToken = async (req, res) => {
         // Format response
         const photos = await Promise.all(order.items.map(async (item) => {
             // Generate presigned URL for watermarked preview
-            const previewUrl = await s3Service.generatePresignedUrl(
-                item.photo.watermarkedKey,
-                'watermarked',
-                3600 // 1 hour
-            );
+            const urls = await previewUrls(item.photo);
 
             return {
                 id: item.photo.id,
@@ -121,7 +118,7 @@ exports.getOrderByToken = async (req, res) => {
                 price: item.price,
                 downloadedAt: item.downloadedAt,
                 downloadCount: item.downloadCount,
-                previewUrl // Watermarked preview
+                ...urls
             };
         }));
 

@@ -151,6 +151,7 @@ const startServer = async () => {
 
         // Start server regardless of database status
         app.listen(PORT, () => {
+            require('./services/video-worker.service').start();
             logger.info(`🚀 Servidor rodando na porta ${PORT}`);
             logger.info(`📦 Ambiente: ${process.env.NODE_ENV || 'development'}`);
             logger.info(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);

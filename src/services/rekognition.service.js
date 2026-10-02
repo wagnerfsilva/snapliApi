@@ -109,7 +109,7 @@ class RekognitionService {
     /**
      * Index faces from image to collection
      */
-    async indexFaces(imageBuffer, externalImageId) {
+    async indexFaces(imageBuffer, externalImageId, maxFaces = 10) {
         this._checkAwsConfigured();
 
         try {
@@ -120,7 +120,7 @@ class RekognitionService {
                 },
                 ExternalImageId: externalImageId,
                 DetectionAttributes: ['ALL'],
-                MaxFaces: 10,
+                MaxFaces: maxFaces,
                 QualityFilter: 'AUTO'
             });
 

@@ -51,6 +51,32 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING,
             allowNull: true
         },
+        mediaType: {
+            type: DataTypes.STRING(10),
+            allowNull: false,
+            defaultValue: 'photo',
+            validate: { isIn: [['photo', 'video']] }
+        },
+        durationMs: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+            validate: { min: 1 }
+        },
+        previewKey: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        processingVersion: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 1,
+            validate: { min: 1 }
+        },
+        uploadId: { type: DataTypes.STRING, allowNull: true },
+        uploadStatus: { type: DataTypes.STRING(16), allowNull: true },
+        processingOwner: { type: DataTypes.UUID, allowNull: true },
+        processingHeartbeatAt: { type: DataTypes.DATE, allowNull: true },
+        processingAttempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
         faceData: {
             type: DataTypes.JSONB,
             allowNull: true,
@@ -107,6 +133,11 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     Photo.associate = function (models) {
+        Photo.hasMany(models.MediaFace, {
+            foreignKey: 'photoId',
+            as: 'indexedFaces',
+            onDelete: 'CASCADE'
+        });
         // Photo belongs to an Event
         Photo.belongsTo(models.Event, {
             foreignKey: 'eventId',

@@ -1,8 +1,9 @@
-const { Photo, Event, Order, OrderItem, sequelize } = require('../models');
+const { Photo, MediaFace, Event, Order, OrderItem, sequelize } = require('../models');
 const { Op, fn, col, literal, QueryTypes } = require('sequelize');
 const rekognitionService = require('../services/rekognition.service');
 const s3Service = require('../services/s3.service');
 const logger = require('../utils/logger');
+const { previewUrls } = require('../services/media-preview.service');
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -43,7 +44,12 @@ class SearchController {
                 });
             }
 
-            const externalImageIds = [...new Set(searchResult.matches.map(match => match.externalImageId).filter(Boolean))];
+            const videoMatches = searchResult.matches.filter(match => match.externalImageId?.startsWith('video_'));
+            const indexedVideoFaces = videoMatches.length ? await MediaFace.findAll({
+                where: { faceId: { [Op.in]: videoMatches.map(match => match.faceId) } },
+                attributes: ['faceId', 'photoId', 'timestampMs', 'processingVersion']
+            }) : [];
+            const externalImageIds = [...new Set(searchResult.matches.map(match => match.externalImageId).filter(id => id && !id.startsWith('video_')))];
             const photoIds = externalImageIds.filter(id => uuidRegex.test(id));
 
             const matchConditions = externalImageIds.flatMap(externalImageId => ([
@@ -53,6 +59,10 @@ class SearchController {
 
             if (photoIds.length > 0) {
                 matchConditions.push({ id: { [Op.in]: photoIds } });
+            }
+            if (indexedVideoFaces.length) matchConditions.push({ id: { [Op.in]: [...new Set(indexedVideoFaces.map(face => face.photoId))] } });
+            if (!matchConditions.length) {
+                return res.json({ success: true, data: { photos: [], matchCount: 0, searchedFaceDetected: true } });
             }
 
             // Get photos from database
@@ -65,7 +75,7 @@ class SearchController {
                     {
                         model: Event,
                         as: 'event',
-                        attributes: ['id', 'name', 'date', 'location', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'freePhotosCount'],
+                        attributes: ['id', 'name', 'date', 'location', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'freePhotosCount', 'videoEnabled', 'pricePerVideo', 'videoPricingPackages', 'allVideosPrice'],
                         where: { isActive: true },
                         required: true
                     }
@@ -74,7 +84,10 @@ class SearchController {
             });
 
             // Map similarity scores to photos and generate signed URLs
-            const photosWithSimilarity = await Promise.all(photos.map(async (photo) => {
+            const visiblePhotos = photos.filter(photo => photo.mediaType !== 'video' || (
+                photo.event.videoEnabled && photo.previewKey && indexedVideoFaces.some(face => face.photoId === photo.id && face.processingVersion === photo.processingVersion)
+            ));
+            const photosWithSimilarity = await Promise.all(visiblePhotos.map(async (photo) => {
                 const externalImageIdCandidates = [
                     photo.id,
                     basenameWithoutExt(photo.originalKey),
@@ -83,7 +96,8 @@ class SearchController {
                 const match = searchResult.matches.find(m => externalImageIdCandidates.includes(m.externalImageId));
 
                 // Generate pre-signed URLs (valid for 1 hour)
-                const watermarkedUrl = await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600);
+                const faces = indexedVideoFaces.filter(face => face.photoId === photo.id && face.processingVersion === photo.processingVersion);
+                const similarities = faces.map(face => videoMatches.find(candidate => candidate.faceId === face.faceId)?.similarity || 0);
 
                 return {
                     id: photo.id,
@@ -94,8 +108,9 @@ class SearchController {
                     faceCount: photo.faceCount,
                     originalFilename: photo.originalFilename,
                     createdAt: photo.createdAt,
-                    similarity: match?.similarity || 0,
-                    watermarkedUrl
+                    similarity: photo.mediaType === 'video' ? Math.max(0, ...similarities) : match?.similarity || 0,
+                    matchedTimestampsMs: [...new Set(faces.map(face => face.timestampMs))].sort((first, second) => first - second),
+                    ...(await previewUrls(photo))
                 };
             }));
 
@@ -146,6 +161,12 @@ class SearchController {
                 processingStatus: 'completed'
             };
 
+            const event = await Event.findByPk(eventId);
+            where[Op.or] = [{ mediaType: 'photo' }];
+            if (event?.isActive && event.videoEnabled) {
+                where[Op.or].push({ mediaType: 'video', previewKey: { [Op.ne]: null } });
+            }
+
             if (hasFaces === 'true') {
                 where.faceCount = { [Op.gt]: 0 };
             }
@@ -166,7 +187,7 @@ class SearchController {
                 faceCount: photo.faceCount,
                 originalFilename: photo.originalFilename,
                 createdAt: photo.createdAt,
-                watermarkedUrl: await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600)
+                ...(await previewUrls(photo))
             })));
 
             res.json({

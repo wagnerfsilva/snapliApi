@@ -1,4 +1,4 @@
-const { Photo, Event, OrderItem } = require('../models');
+const { Photo, MediaFace, Event, OrderItem } = require('../models');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
 const path = require('path');
@@ -6,6 +6,7 @@ const s3Service = require('../services/s3.service');
 const imageService = require('../services/image.service');
 const rekognitionService = require('../services/rekognition.service');
 const logger = require('../utils/logger');
+const { previewUrls } = require('../services/media-preview.service');
 
 class PhotoController {
     /**
@@ -135,7 +136,7 @@ class PhotoController {
                 const data = photo.toJSON();
                 return {
                     ...data,
-                    watermarkedUrl: photo.watermarkedKey ? await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600) : null
+                    ...(await previewUrls(photo))
                 };
             }));
 
@@ -182,8 +183,7 @@ class PhotoController {
 
             const photoData = {
                 ...photo.toJSON(),
-                watermarkedUrl: await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600),
-                thumbnailUrl: photo.thumbnailKey ? await s3Service.generatePresignedUrl(photo.thumbnailKey, 'watermarked', 3600) : null
+                ...(await previewUrls(photo))
             };
 
             res.json({
@@ -212,12 +212,38 @@ class PhotoController {
             }
 
             // Check if photo has been sold
+            if (photo.mediaType === 'video') {
+                const event = await Event.findByPk(photo.eventId);
+                if (!event || (req.userRole !== 'admin' && event.createdBy !== req.userId)) {
+                    return res.status(403).json({ success: false, message: 'Acesso negado ao evento' });
+                }
+                if (['processing', 'pending'].includes(photo.processingStatus)) {
+                    return res.status(409).json({ success: false, message: 'Aguarde o processamento ou cancele o upload aberto' });
+                }
+            }
             const salesCount = await OrderItem.count({ where: { photoId: id } });
             if (salesCount > 0) {
                 return res.status(409).json({
                     success: false,
                     message: `Esta foto não pode ser excluída pois possui ${salesCount} venda(s) associada(s)`
                 });
+            }
+
+            if (photo.mediaType === 'video') {
+                const faces = await MediaFace.findAll({ where: { photoId: id }, attributes: ['faceId'] });
+                try {
+                    for (let offset = 0; offset < faces.length; offset += 1000) {
+                        await rekognitionService.deleteFaces(faces.slice(offset, offset + 1000).map(face => face.faceId));
+                    }
+                } catch (error) {
+                    return res.status(503).json({ success: false, message: 'AWS nao permitiu remover os rostos; o video foi preservado' });
+                }
+                await s3Service.deleteFile(photo.originalKey, 'original');
+                if (photo.previewKey) await s3Service.deleteFile(photo.previewKey, 'watermarked');
+                if (photo.thumbnailKey) await s3Service.deleteFile(photo.thumbnailKey, 'watermarked');
+                await photo.destroy();
+                if (photo.processingStatus === 'completed') await Event.decrement('videoCount', { where: { id: photo.eventId } });
+                return res.json({ success: true, message: 'Video excluido' });
             }
 
             // Delete from S3
@@ -336,12 +362,12 @@ class PhotoController {
             const { count, rows: photos } = await Photo.findAndCountAll({
                 where: {
                     eventId,
-                    processingStatus: 'completed'
+                    [Op.or]: [{ processingStatus: 'completed' }, { mediaType: 'video', uploadStatus: 'completed' }]
                 },
                 limit: safeLimit,
                 offset,
                 order: [['createdAt', 'DESC']],
-                attributes: ['id', 'eventId', 'watermarkedKey', 'thumbnailKey', 'width', 'height', 'faceCount', 'createdAt']
+                attributes: ['id', 'eventId', 'mediaType', 'previewKey', 'durationMs', 'watermarkedKey', 'thumbnailKey', 'originalFilename', 'width', 'height', 'faceCount', 'processingStatus', 'processingError', 'createdAt']
             });
 
             // Return ONLY watermarked and thumbnail presigned URLs
@@ -352,8 +378,10 @@ class PhotoController {
                 height: photo.height,
                 faceCount: photo.faceCount,
                 createdAt: photo.createdAt,
-                watermarkedUrl: await s3Service.generatePresignedUrl(photo.watermarkedKey, 'watermarked', 3600),
-                thumbnailUrl: photo.thumbnailKey ? await s3Service.generatePresignedUrl(photo.thumbnailKey, 'watermarked', 3600) : null
+                originalFilename: photo.originalFilename,
+                processingStatus: photo.processingStatus,
+                processingError: photo.processingError,
+                ...(await previewUrls(photo))
             })));
 
             res.json({
@@ -393,6 +421,21 @@ class PhotoController {
                     success: false,
                     message: 'Foto não encontrada'
                 });
+            }
+
+            if (photo.mediaType === 'video') {
+                const event = await Event.findByPk(photo.eventId);
+                if (!event || (req.userRole !== 'admin' && event.createdBy !== req.userId)) {
+                    return res.status(403).json({ success: false, message: 'Acesso negado ao evento' });
+                }
+                if (photo.processingStatus !== 'failed' || photo.uploadStatus !== 'completed') {
+                    return res.status(409).json({ success: false, message: 'Somente videos enviados com falha podem ser reprocessados' });
+                }
+                const [count] = await Photo.update({ processingStatus: 'pending', processingError: null, processingOwner: null, processingHeartbeatAt: null, processingAttempts: 0 }, {
+                    where: { id: photo.id, processingStatus: 'failed', uploadStatus: 'completed' }
+                });
+                if (!count) return res.status(409).json({ success: false, message: 'Reprocessamento ja iniciado' });
+                return res.json({ success: true, message: 'Video enfileirado para reprocessamento' });
             }
 
             if (!['failed', 'processing', 'pending'].includes(photo.processingStatus)) {

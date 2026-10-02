@@ -1,6 +1,21 @@
 const { Event, Photo, User, sequelize } = require('../models');
 const { Op, literal } = require('sequelize');
 const logger = require('../utils/logger');
+const { validateVideoPricing } = require('../services/video-pricing.service');
+
+function videoPricingFields(body, current = {}) {
+    const fields = {
+        videoEnabled: current.videoEnabled ?? false,
+        pricePerVideo: current.pricePerVideo ?? null,
+        videoPricingPackages: current.videoPricingPackages ?? null,
+        allVideosPrice: current.allVideosPrice ?? null
+    };
+    for (const field of Object.keys(fields)) {
+        if (body[field] !== undefined) fields[field] = body[field];
+    }
+    validateVideoPricing(fields);
+    return fields;
+}
 
 // Clampa entre 0 e 3; preserva undefined para não sobrescrever em updates parciais
 function clampFreePhotosCount(value) {
@@ -221,6 +236,13 @@ class EventController {
             } = req.body;
             const createdBy = req.userId;
 
+            let videoPricing;
+            try {
+                videoPricing = videoPricingFields(req.body);
+            } catch (error) {
+                return res.status(400).json({ success: false, message: error.message });
+            }
+
             if (organizerId) {
                 const organizerError = await validateOrganizer(organizerId);
                 if (organizerError) {
@@ -234,6 +256,7 @@ class EventController {
                 description,
                 location,
                 createdBy,
+                ...videoPricing,
                 pricePerPhoto,
                 pricingPackages,
                 allPhotosPrice,
@@ -294,6 +317,15 @@ class EventController {
                 allPhotosPrice,
                 freePhotosCount: clampFreePhotosCount(freePhotosCount)
             };
+
+            if (req.userRole === 'fotografo' && event.createdBy !== req.userId) {
+                return res.status(403).json({ success: false, message: 'Acesso negado a este evento' });
+            }
+            try {
+                Object.assign(updateData, videoPricingFields(req.body, event));
+            } catch (error) {
+                return res.status(400).json({ success: false, message: error.message });
+            }
 
             // organizerId/organizerCommissionPercentage only touched when explicitly sent,
             // so partial updates that omit them don't accidentally clear the organizer
