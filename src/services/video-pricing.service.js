@@ -33,27 +33,31 @@ function quoteVideos(count, event) {
     validateVideoPricing(event);
     if (!event.videoEnabled) throw new Error('Venda de videos desabilitada neste evento');
     const unit = toCents(event.pricePerVideo);
+    const freeCount = Math.max(0, Math.min(event.freePhotosCount || 0, count - 1));
+    const paidCount = count - freeCount;
     const packages = (event.videoPricingPackages ?? []).map(pack => ({
         quantity: pack.quantity,
         cents: toCents(pack.price)
-    }));
-    const costs = Array(count + 1).fill(Infinity);
-    costs[0] = 0;
-    for (let quantity = 1; quantity <= count; quantity++) {
-        costs[quantity] = costs[quantity - 1] + unit;
+    })).sort((first, second) => second.quantity - first.quantity);
+    const prices = [paidCount * unit];
+    if (packages.length) {
+        let remaining = paidCount;
+        let packagePrice = 0;
         for (const pack of packages) {
-            if (pack.quantity <= quantity) {
-                costs[quantity] = Math.min(costs[quantity], costs[quantity - pack.quantity] + pack.cents);
-            }
+            const uses = Math.floor(remaining / pack.quantity);
+            packagePrice += uses * pack.cents;
+            remaining -= uses * pack.quantity;
         }
+        prices.push(packagePrice + remaining * unit);
     }
-    const totalCents = Math.min(costs[count], event.allVideosPrice == null ? Infinity : toCents(event.allVideosPrice));
-    const base = Math.floor(totalCents / count);
-    const remainder = totalCents % count;
+    if (event.allVideosPrice != null) prices.push(toCents(event.allVideosPrice));
+    const totalCents = Math.min(...prices);
+    const base = Math.floor(totalCents / paidCount);
+    const remainder = totalCents % paidCount;
     return {
         totalCents,
         total: totalCents / 100,
-        itemPrices: Array.from({ length: count }, (_, index) => (base + (index < remainder ? 1 : 0)) / 100)
+        itemPrices: Array.from({ length: count }, (_, index) => index < freeCount ? 0 : (base + (index - freeCount < remainder ? 1 : 0)) / 100)
     };
 }
 

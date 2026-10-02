@@ -22,18 +22,20 @@ const migration = require('../../src/migrations/20261002000001-add-video-foundat
 
 const pricing = { videoEnabled: true, pricePerVideo: '10.00', videoPricingPackages: [] };
 
-test('videos use their own price and never photo freebies', () => {
-    assert.equal(quoteVideos(3, { ...pricing, pricePerPhoto: 1, freePhotosCount: 3 }).total, 30);
+test('videos use their own price and the same event freebies as photos', () => {
+    const quote = quoteVideos(3, { ...pricing, pricePerPhoto: 1, freePhotosCount: 3 });
+    assert.equal(quote.total, 10);
+    assert.deepEqual(quote.itemPrices, [0, 0, 10]);
 });
 
-test('chooses optimal packages rather than the largest package first', () => {
+test('uses largest packages first exactly like photo pricing', () => {
     assert.equal(quoteVideos(6, {
         ...pricing,
         videoPricingPackages: [{ quantity: 4, price: 25 }, { quantity: 3, price: 15 }]
-    }).total, 30);
+    }).total, 45);
 });
 
-test('ceiling applies only to selected videos and distributes exact cents', () => {
+test('all-video price uses the same selected-item rule as all-photo price and distributes exact cents', () => {
     const quote = quoteVideos(3, { ...pricing, allVideosPrice: '10.00' });
     assert.deepEqual(quote.itemPrices, [3.34, 3.33, 3.33]);
     assert.equal(quote.itemPrices.reduce((total, price) => total + Math.round(price * 100), 0), quote.totalCents);
@@ -131,11 +133,27 @@ describe('mixed order pricing', () => {
         expect(OrderItem.create.mock.calls.map(call => call[0].price)).toEqual([10, 12.5]);
     });
 
-    test('video ceiling rateio sums exactly to the PIX amount', async () => {
+    test('all-video price applies event freebies and rateio sums exactly to the PIX amount', async () => {
         const media = [0, 1, 2].map(index => ({ ...video, id: `video${index}`, event: { ...event, allVideosPrice: '10.00' } }));
         await submit(media);
-        expect(OrderItem.create.mock.calls.map(call => call[0].price)).toEqual([3.34, 3.33, 3.33]);
+        expect(OrderItem.create.mock.calls.map(call => call[0].price)).toEqual([0, 5, 5]);
         expect(pixService.createPixPayment.mock.calls[0][0].amount).toBe(10);
+    });
+
+    test.each([
+        { quantity: 6, freePhotosCount: 0, packages: [{ quantity: 4, price: 25 }, { quantity: 3, price: 15 }], allPrice: null },
+        { quantity: 6, freePhotosCount: 1, packages: [{ quantity: 3, price: 15 }], allPrice: null },
+        { quantity: 6, freePhotosCount: 2, packages: [{ quantity: 3, price: 15 }], allPrice: '12.00' },
+        { quantity: 1, freePhotosCount: 3, packages: [], allPrice: null }
+    ])('photo and video totals match for identical pricing: %j', async configuration => {
+        const sharedEvent = { ...event, freePhotosCount: configuration.freePhotosCount, pricePerPhoto: '10.00', pricingPackages: configuration.packages, allPhotosPrice: configuration.allPrice, videoPricingPackages: configuration.packages, allVideosPrice: configuration.allPrice };
+        await submit(Array.from({ length: configuration.quantity }, (_, index) => ({ ...photo, id: `photo${index}`, event: sharedEvent })));
+        const photoTotal = Order.create.mock.calls[0][0].totalAmount;
+        Order.create.mockClear();
+        OrderItem.create.mockClear();
+        await submit(Array.from({ length: configuration.quantity }, (_, index) => ({ ...video, id: `video${index}`, event: sharedEvent })));
+        expect(Order.create.mock.calls[0][0].totalAmount).toBe(photoTotal);
+        expect(OrderItem.create.mock.calls.slice(0, Math.min(configuration.freePhotosCount, configuration.quantity - 1)).map(call => call[0].price)).toEqual(Array(Math.min(configuration.freePhotosCount, configuration.quantity - 1)).fill(0));
     });
 
     test.each([

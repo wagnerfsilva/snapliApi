@@ -49,18 +49,22 @@ Prices must be positive, with at most two decimal places. An enabled event must
 have an individual video price. Packages accept integer quantities from 1 to
 1000, with at most 100 configured packages. Optional prices and packages can be
 cleared using `null`; omitted fields are preserved on partial updates.
-`allVideosPrice` is a ceiling for the selected videos, not permission to download
-other videos from the event. Photo packages and photo freebies do not apply to
-videos. Photographers can update pricing only for their own events.
+`allVideosPrice` corresponds to the existing photo option "Todas as Fotos", shown
+as "Todos os Videos". It follows the same selected-item pricing rule and does not
+grant access to unselected items. Videos use their own prices and packages, with
+the same event `freePhotosCount` configuration applied separately to each media
+group, always retaining at least one paid item. Photographers can update pricing
+only for their own events.
 
 ### Order Compatibility
 
 `POST /orders` retains `items: [{ "photoId": "uuid" }]`. The ID references a row
 in the existing `photos` table, whose `mediaType` is `photo` or `video`. The server
 loads the type and price from the database; client prices and types are ignored.
-Items are grouped by event and media type, and video packages use the lowest
-available exact-quantity combination or configured ceiling. Video amounts are
-distributed in whole cents across the purchased items.
+Items are grouped by event and media type. Both types compare individual price,
+largest-package-first pricing plus remaining individual items, and the configured
+all-items price. Free items are excluded from individual/package calculations.
+Video amounts are distributed in whole cents across paid items.
 
 Videos are accepted only with `processingStatus: completed`, a `previewKey`, an
 active event, and valid enabled video pricing. Pending videos and duplicate IDs
