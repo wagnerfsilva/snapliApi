@@ -75,8 +75,8 @@ async function validateRekognition(reportPath) {
     require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
     const { RekognitionClient, CreateCollectionCommand, IndexFacesCommand, SearchFacesByImageCommand, DeleteCollectionCommand } = require('@aws-sdk/client-rekognition');
     const localReport = JSON.parse(await fs.readFile(reportPath, 'utf8'));
-    if (!localReport.originalUnchanged || localReport.sampleRate !== 1 || !localReport.frames?.length || localReport.frames.length > 120) {
-        throw new Error('Teste AWS exige relatorio local valido com ate 120 frames a 1 FPS');
+    if (!localReport.originalUnchanged || ![0.1, 1].includes(localReport.sampleRate) || !localReport.frames?.length || localReport.frames.length > 120) {
+        throw new Error('Teste AWS exige relatorio local valido com ate 120 frames a 0.1 ou 1 FPS');
     }
     const collectionId = `snapli-video-validation-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const region = process.env.AWS_REGION || 'us-east-1';

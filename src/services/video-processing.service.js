@@ -53,11 +53,11 @@ function validateVideoMetadata(metadata, fileSize) {
     };
 }
 
-function sampleTimestamps(durationMs, sampleRate = 1) {
+function sampleTimestamps(durationMs, sampleRate = 0.1) {
     if (!Number.isInteger(durationMs) || durationMs <= 0 || durationMs > MAX_DURATION_MS) {
         throw new Error('Duracao de amostragem invalida');
     }
-    if (![0.5, 1, 2].includes(sampleRate)) throw new Error('Amostragem deve ser 0.5, 1 ou 2 FPS');
+    if (![0.1, 0.5, 1, 2].includes(sampleRate)) throw new Error('Amostragem deve ser 0.1, 0.5, 1 ou 2 FPS');
     return Array.from({ length: Math.ceil(durationMs * sampleRate / 1000) }, (_, index) => index * 1000 / sampleRate);
 }
 
@@ -79,7 +79,7 @@ async function inspectVideo(filePath) {
     return validateVideoMetadata(await probe(absolutePath), stat.size);
 }
 
-async function prepareVideo(filePath, { sampleRate = 1 } = {}) {
+async function prepareVideo(filePath, { sampleRate = 0.1 } = {}) {
     const input = path.resolve(filePath);
     const metadata = await inspectVideo(input);
     const timestamps = sampleTimestamps(metadata.durationMs, sampleRate);

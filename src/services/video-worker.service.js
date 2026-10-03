@@ -94,7 +94,7 @@ async function processVideo(photo) {
                 previewKey, thumbnailKey, width: prepared.metadata.width, height: prepared.metadata.height,
                 durationMs: prepared.metadata.durationMs, faceCount, processingStatus: 'completed',
                 processingOwner: null, processingHeartbeatAt: null, processingError: null,
-                metadata: { video: prepared.metadata, sampleRate: 1 }
+                metadata: { video: prepared.metadata, sampleRate: prepared.sampleRate }
             }, { where, transaction });
             if (count) await Event.increment('videoCount', { by: 1, where: { id: photo.eventId }, transaction });
         });

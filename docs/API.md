@@ -97,7 +97,8 @@ FFmpeg must be installed in the deployment image. `/api/health` exposes the Git
 revision and `video.ready`; upload start returns 503 while the worker is unavailable.
 Set `VIDEO_PROCESSING_ENABLED=false` to disable this worker.
 
-Frames are sampled at 1 FPS and indexed in the existing Rekognition collection.
+Frames are sampled every 10 seconds (0.1 FPS) and indexed in the existing Rekognition collection.
+This applies to newly processed videos; completed videos are not reprocessed automatically.
 Face IDs map to video, timestamp and processing version in `media_faces`. Search
 deduplicates videos, retaining maximum similarity and matched timestamps. It does
 not guarantee independent-selfie accuracy or complete recall: faces need to be
@@ -131,7 +132,7 @@ they do not validate a live PostgreSQL migration or real AWS processing.
 The local processing service now supports MOV/MP4 with HEVC or H.264, up to
 120 seconds and 500 MiB (524288000 bytes).
 FFmpeg must include libx264, AAC, zscale, tonemap and drawtext. HDR is tone mapped
-to SDR, orientation is applied, frames are sampled at 1 FPS, and a marked H.264
+to SDR, orientation is applied, frames are sampled every 10 seconds, and a marked H.264
 preview and poster are created in an OS temporary directory. Recognition frames
 are unmarked and must never be exposed as customer previews.
 

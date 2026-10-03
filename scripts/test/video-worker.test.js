@@ -24,16 +24,16 @@ beforeEach(() => {
     jest.clearAllMocks();
     Photo.update.mockResolvedValue([1]);
     mockSend.mockResolvedValue({ Body: 'source' });
-    prepareVideo.mockResolvedValue({ directory: '/fake/output', previewPath: '/fake/preview.mp4', posterPath: '/fake/poster.jpg', metadata: { width: 720, height: 1280, durationMs: 2000 }, frames: [{ filePath: '/fake/frame.jpg', timestampMs: 1000 }] });
+    prepareVideo.mockResolvedValue({ directory: '/fake/output', previewPath: '/fake/preview.mp4', posterPath: '/fake/poster.jpg', sampleRate: 0.1, metadata: { width: 720, height: 1280, durationMs: 2000 }, frames: [{ filePath: '/fake/frame.jpg', timestampMs: 0 }] });
     faces.indexFaces.mockResolvedValue({ faces: [{ faceId: 'face', confidence: 99, boundingBox: {} }] });
 });
 
 test('worker streams original, indexes existing collection and publishes only after faces are saved', async () => {
     await worker.processVideo(photo);
     expect(mockSend.mock.calls.map(call => call[0].constructor.name)).toEqual(['GetObjectCommand', 'PutObjectCommand', 'PutObjectCommand']);
-    expect(faces.indexFaces).toHaveBeenCalledWith(Buffer.from('frame'), 'video_video_v1_t1000', 100);
-    expect(MediaFace.bulkCreate.mock.calls[0][0][0]).toMatchObject({ photoId: 'video', collectionId: 'existing-collection', timestampMs: 1000, processingVersion: 1 });
-    expect(Photo.update.mock.calls[0][0]).toMatchObject({ processingStatus: 'completed', durationMs: 2000, faceCount: 1 });
+    expect(faces.indexFaces).toHaveBeenCalledWith(Buffer.from('frame'), 'video_video_v1_t0', 100);
+    expect(MediaFace.bulkCreate.mock.calls[0][0][0]).toMatchObject({ photoId: 'video', collectionId: 'existing-collection', timestampMs: 0, processingVersion: 1 });
+    expect(Photo.update.mock.calls[0][0]).toMatchObject({ processingStatus: 'completed', durationMs: 2000, faceCount: 1, metadata: { sampleRate: 0.1 } });
     expect(Event.increment).toHaveBeenCalledWith('videoCount', expect.objectContaining({ by: 1 }));
 });
 

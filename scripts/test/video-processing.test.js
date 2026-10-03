@@ -29,11 +29,13 @@ test('IMG_5416 metadata fits 500 MiB and preserves portrait HDR information', ()
     expect(510090617).toBeLessThan(MAX_VIDEO_BYTES);
 });
 
-test('samples timestamps across the whole video, including its end', () => {
+test('samples one frame every ten seconds by default', () => {
     const frames = sampleTimestamps(89637);
-    expect(frames).toHaveLength(90);
-    expect(frames.slice(0, 3)).toEqual([0, 1000, 2000]);
-    expect(frames.at(-1)).toBe(89000);
+    expect(frames).toEqual([0, 10000, 20000, 30000, 40000, 50000, 60000, 70000, 80000]);
+    expect(sampleTimestamps(10000)).toEqual([0]);
+    expect(sampleTimestamps(10001)).toEqual([0, 10000]);
+    expect(sampleTimestamps(120000)).toHaveLength(12);
+    expect(sampleTimestamps(89637, 1)).toHaveLength(90);
     expect(sampleTimestamps(89637, 0.5)).toHaveLength(45);
     expect(sampleTimestamps(89637, 2)).toHaveLength(180);
 });
