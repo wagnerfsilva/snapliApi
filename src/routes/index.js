@@ -21,7 +21,7 @@ router.get('/health', (req, res) => {
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV,
         revision: process.env.RAILWAY_GIT_COMMIT_SHA || null,
-        video: { ready: require('../services/video-worker.service').isReady(), maxBytes: 500 * 1024 * 1024, maxSeconds: 120 },
+        video: { ready: require('../services/video-lambda.service').isReady(), processor: 'lambda', maxBytes: 500 * 1024 * 1024, maxSeconds: 120 },
         asaas: {
             configured: !!asaasKey,
             environment: process.env.ASAAS_ENVIRONMENT || 'NOT SET'

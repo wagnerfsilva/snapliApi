@@ -435,7 +435,13 @@ class PhotoController {
                     where: { id: photo.id, processingStatus: 'failed', uploadStatus: 'completed' }
                 });
                 if (!count) return res.status(409).json({ success: false, message: 'Reprocessamento ja iniciado' });
-                return res.json({ success: true, message: 'Video enfileirado para reprocessamento' });
+                try {
+                    await require('../services/video-lambda.service').retry(photo);
+                } catch (error) {
+                    await Photo.update({ processingStatus: 'failed', processingError: 'Falha ao acionar Lambda de video' }, { where: { id: photo.id, processingStatus: 'pending' } });
+                    throw error;
+                }
+                return res.json({ success: true, message: 'Lambda de video acionada para reprocessamento' });
             }
 
             if (!['failed', 'processing', 'pending'].includes(photo.processingStatus)) {

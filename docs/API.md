@@ -77,25 +77,35 @@ Admin and photographer authentication is required. Photographers can operate
 only on their own events. Requests and responses use the normal success envelope.
 
 1. `POST /videos/uploads`: `{ eventId, filename, fileSize, mimeType }` returns
-  `data: { id, partSize, partCount }`. Accepted files are MOV/MP4, up to 500 MiB
-  (524288000 bytes), 120 seconds, H.264/HEVC, and 4096 pixels per dimension.
-  Container, codec and duration are checked after transfer by FFprobe.
+   `data: { id, partSize, partCount }`. Accepted files are MOV/MP4, up to 500 MiB
+   (524288000 bytes), 120 seconds, H.264/HEVC, and 4096 pixels per dimension.
+   Container, codec and duration are checked after transfer by FFprobe.
 2. `PUT /videos/uploads/:id/parts/:partNumber`: raw `application/octet-stream`,
-  exactly 8 MiB per part except the last. Returns `{ PartNumber, ETag }`.
-  The browser persists the session locally; reselect the same file to resume.
+   exactly 8 MiB per part except the last. Returns `{ PartNumber, ETag }`.
+   The browser persists the session locally; reselect the same file to resume.
 3. `POST /videos/uploads/:id/complete`: `{ parts: [{ PartNumber, ETag }] }`.
-  Completion validates S3 object size and queues the database job. It is idempotent.
+  Completion validates S3 object size and confirms upload state. The S3 event
+  invokes the video Lambda; an event arriving before confirmation is retried.
+  Completion is idempotent.
 4. `GET /videos/:id/status`: upload/processing status, error, face count and,
-  when completed, marked poster and preview URLs. It never returns the original.
+   when completed, marked poster and preview URLs. It never returns the original.
 5. `DELETE /videos/uploads/:id`: abort an unfinished S3 multipart upload.
-6. `POST /photos/:id/retry`: requeue a failed video with a completed upload.
-  Running and completed video jobs cannot be retried.
+6. `POST /photos/:id/retry`: trigger the video Lambda again by copying the original
+  S3 object onto its existing key, for a failed video with a completed upload.
+   Running and completed video jobs cannot be retried.
 
-The serial worker uses PostgreSQL row locks, a heartbeat and a 20-minute stale
-lease. Interrupted jobs are attempted at most three times before requiring retry.
-FFmpeg must be installed in the deployment image. `/api/health` exposes the Git
-revision and `video.ready`; upload start returns 503 while the worker is unavailable.
-Set `VIDEO_PROCESSING_ENABLED=false` to disable this worker.
+Photos and videos use separate S3-triggered Lambda functions. There is no API
+video worker. `POST /videos/lambda-callback` requires `x-lambda-secret` and handles
+claim, face mappings, completion and failure under PostgreSQL row locks. Claims
+expire 15 minutes after acquisition, matching the Lambda timeout; frame callbacks
+do not extend that deadline. Interrupted processing is attempted at most three
+times before requiring manual retry. Duplicate completion cannot increment the
+event counter twice. FFmpeg runs only in the video Lambda container.
+`/api/health` exposes the Git revision, `video.processor` and `video.ready`.
+Set `VIDEO_LAMBDA_ENABLED=true` only after deploying the video function and its
+S3 notifications; this is a configuration check, not an AWS health probe.
+Upload start returns 503 when that configuration is disabled or incomplete.
+See [video Lambda deployment](../lambda/video/README.md) for the rollout order.
 
 Frames are sampled every 10 seconds (0.1 FPS) and indexed in the existing Rekognition collection.
 This applies to newly processed videos; completed videos are not reprocessed automatically.
@@ -113,8 +123,8 @@ requires `rekognition:DeleteFaces`; a denied removal preserves the database item
 IAM/S3 permissions must include multipart upload/abort plus existing original read,
 marked-output write and Rekognition index/search permissions. Abandoned multipart
 uploads require cancellation or an S3 lifecycle rule; no lifecycle rule is installed
-automatically. This pilot runs FFmpeg beside the API and is not a bulk-upload
-capacity certification. Enable one real event and monitor processing first.
+automatically. This pilot is not a bulk-upload capacity certification. Existing
+completed videos are left intact when switching to Lambda.
 
 ### Focused Tests
 

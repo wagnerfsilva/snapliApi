@@ -7,6 +7,7 @@ const validate = require('../middleware/validate');
 const controller = require('../controllers/video.controller');
 const router = express.Router();
 
+router.post('/lambda-callback', controller.lambdaCallback);
 router.use(authenticate, authorize('admin', 'fotografo'));
 router.post('/uploads', body('eventId').isUUID(), validate, controller.start);
 router.param('id', (req, res, next, id) => {

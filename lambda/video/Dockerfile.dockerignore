@@ -1,0 +1,11 @@
+**
+!lambda/
+!lambda/video/
+!lambda/video/index.js
+!lambda/video/package.json
+!lambda/video/package-lock.json
+!lambda/video/ffmpeg.sh
+!lambda/video/ffprobe.sh
+!src/
+!src/services/
+!src/services/video-processing.service.js

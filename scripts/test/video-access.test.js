@@ -6,7 +6,8 @@ jest.mock('../../src/models', () => ({
     sequelize: { transaction: jest.fn() }
 }));
 jest.mock('../../src/services/video-upload.service', () => ({ PART_SIZE: 8388608, validateUpload: jest.fn(() => 'video/mp4'), validateParts: jest.fn(), start: jest.fn(), finish: jest.fn(), cancel: jest.fn(), part: jest.fn() }));
-jest.mock('../../src/services/video-worker.service', () => ({ isReady: () => true }));
+jest.mock('../../src/services/video-lambda.service', () => ({ isReady: () => true, retry: jest.fn() }));
+jest.mock('../../src/config/aws', () => ({ rekognition: { collectionId: 'existing' } }));
 jest.mock('../../src/services/media-preview.service', () => ({ previewUrls: jest.fn(async () => ({ mediaType: 'video', previewUrl: 'marked-preview', thumbnailUrl: 'marked-poster' })) }));
 jest.mock('../../src/services/s3.service', () => ({ generatePresignedUrl: jest.fn(async () => 'private-original') }));
 jest.mock('../../src/services/email.service', () => ({}));
