@@ -5,6 +5,8 @@ const { promisify } = require('node:util');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const sharp = require('sharp');
+const { createWatermarkSvg } = require('../../lambda/shared/watermark');
 
 const execute = promisify(execFile);
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
@@ -88,9 +90,16 @@ async function prepareVideo(filePath, { sampleRate = 0.1 } = {}) {
     await fs.mkdir(frameDirectory);
     const previewPath = path.join(directory, 'preview.mp4');
     const posterPath = path.join(directory, 'poster.jpg');
+    const watermarkPath = path.join(directory, 'watermark.png');
     const startedAt = Date.now();
 
     try {
+        const previewScale = Math.min(1, 1280 / metadata.width, 1280 / metadata.height);
+        const previewWidth = Math.max(2, Math.round(metadata.width * previewScale / 2) * 2);
+        const previewHeight = Math.max(2, Math.round(metadata.height * previewScale / 2) * 2);
+        const watermarkSvg = createWatermarkSvg(previewWidth, previewHeight);
+        await sharp(Buffer.from(watermarkSvg)).png().toFile(watermarkPath);
+
         await run('ffmpeg', [
             '-hide_banner', '-loglevel', 'error', '-nostdin', '-threads', '2', '-i', input,
             '-map', '0:v:0', '-an', '-sn', '-dn',
@@ -105,8 +114,10 @@ async function prepareVideo(filePath, { sampleRate = 0.1 } = {}) {
 
         await run('ffmpeg', [
             '-hide_banner', '-loglevel', 'error', '-nostdin', '-threads', '2', '-i', input,
-            '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn', '-map_metadata', '-1',
-            '-vf', `${imageFilter(metadata, 1280)},drawtext=text=SNAPLI:fontcolor=white@0.35:fontsize=48:x=(w-tw)/2:y=(h-th)/2:box=1:boxcolor=black@0.15:boxborderw=12`,
+            '-loop', '1', '-framerate', '30', '-i', watermarkPath,
+            '-map', '0:a:0?', '-sn', '-dn', '-map_metadata', '-1',
+            '-filter_complex', `[0:v]${imageFilter(metadata, 1280)}[base];[base][1:v]overlay=0:0:shortest=1,format=yuv420p[v]`,
+            '-map', '[v]',
             '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '25', '-pix_fmt', 'yuv420p', '-threads', '2',
             '-r', '30', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', '-color_range', 'tv',
             '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', '-metadata:s:v:0', 'rotate=0', previewPath

@@ -26,9 +26,9 @@ COPY lambda/video/package*.json ./
 RUN npm ci --omit=dev
 COPY lambda/video/index.js ./lambda/video/index.js
 COPY src/services/video-processing.service.js ./src/services/video-processing.service.js
+COPY lambda/shared/watermark.js ./lambda/shared/watermark.js
 RUN ffmpeg -hide_banner -filters 2>/dev/null | grep -q zscale \
     && ffmpeg -hide_banner -filters 2>/dev/null | grep -q tonemap \
-    && ffmpeg -hide_banner -filters 2>/dev/null | grep -q drawtext \
     && ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libx264
 
 CMD ["lambda/video/index.handler"]

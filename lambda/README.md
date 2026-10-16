@@ -20,7 +20,7 @@ Lambda function que processa imagens automaticamente quando são enviadas para o
 npm install --os=linux --cpu=x64 --libc=glibc sharp
 
 # 2. Rebuild zip
-rm -f function.zip && zip -r function.zip index.js package.json node_modules/
+rm -f function.zip && zip -r function.zip index.js package.json node_modules/ shared/
 
 # 3. Deploy via script
 cd .. && node scripts/setup/update-lambda.js
@@ -122,6 +122,7 @@ cd lambda && npm run logs
 **Erro: "Cannot find module 'sharp'"**
 - Sharp deve ser instalado com flags linux: `npm install --os=linux --cpu=x64 --libc=glibc sharp`
 - Verificar presença de `node_modules/@img/sharp-linux-x64/`
+- O pacote precisa incluir `shared/watermark.js`, usado pela Lambda de fotos e pela Lambda de vídeos.
 
 **Erro: "Access Denied" no S3**
 - Verificar permissões da role `snapli-lambda-execution-role`

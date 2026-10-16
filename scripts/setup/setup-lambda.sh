@@ -69,9 +69,7 @@ build_package() {
 
     # Create zip (exclude local dev artifacts)
     rm -f function.zip
-    zip -r function.zip . \
-        --exclude "*.zip" \
-        --exclude ".git/*" \
+    zip -r function.zip index.js package.json node_modules shared \
         --exclude "node_modules/.cache/*" \
         --exclude "test-event.json"
 

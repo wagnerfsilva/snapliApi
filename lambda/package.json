@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "install:linux": "npm install --platform=linux --arch=x64 --libc=glibc",
-    "build": "rm -f function.zip && zip -r function.zip . --exclude '*.zip' --exclude '.git/*' --exclude 'node_modules/.cache/*'",
+    "build": "rm -f function.zip && zip -r function.zip index.js package.json node_modules shared --exclude 'node_modules/.cache/*'",
     "deploy:code": "npm run build && aws lambda update-function-code --function-name snapli-image-processor --zip-file fileb://function.zip",
     "deploy:env": "aws lambda update-function-configuration --function-name snapli-image-processor --environment \"$(node -e 'const e=require(\\\"./env.json\\\"); console.log(JSON.stringify({Variables:e}))')\"",
     "logs": "aws logs tail /aws/lambda/snapli-image-processor --follow",

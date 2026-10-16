@@ -9,6 +9,8 @@ The handler validates media, creates a marked poster and MP4 preview, indexes
 one unmarked frame every 10 seconds in the existing Rekognition collection, and
 persists results through authenticated API callbacks. Originals are not replaced
 with previews. Existing completed videos are not reprocessed during rollout.
+Photo and video watermarks use the shared SVG generator at
+`lambda/shared/watermark.js`; include it in the container build.
 
 ## Build
 
@@ -66,6 +68,9 @@ policy statements when adding that permission.
    `API_CALLBACK_URL=https://snapliapi-production.up.railway.app/api/videos/lambda-callback`,
    `LAMBDA_INTERNAL_SECRET` matching the API, `S3_BUCKET_ORIGINAL`,
    `S3_BUCKET_WATERMARKED`, and `REKOGNITION_COLLECTION_ID` matching the API.
+   For matching photo output, set `WATERMARK_TEXT` and `WATERMARK_OPACITY` to the
+   same values configured on `snapli-image-processor`; defaults are `SNAPLI` and
+   `0.4`.
    Do not set reserved `AWS_REGION` or application AWS access keys: the function
    uses its execution role and AWS-provided region.
 4. Grant the original bucket permission to invoke the video Lambda, with
