@@ -166,7 +166,7 @@ exports.lambdaCallback = async (req, res, next) => {
                 })), { transaction, updateOnDuplicate: ['timestampMs', 'processingVersion', 'confidence', 'boundingBox'] });
             } else if (action === 'completed') {
                 const prefix = `events/${photo.eventId}/videos/${photo.id}/v${photo.processingVersion}`;
-                if (previewKey !== `${prefix}/preview.mp4` || thumbnailKey !== `${prefix}/poster.jpg` || !metadata || metadata.fileSize !== photo.fileSize || !Number.isInteger(metadata.durationMs) || metadata.durationMs < 1 || metadata.durationMs > 120000 || !Number.isInteger(metadata.width) || metadata.width < 2 || metadata.width > 4096 || !Number.isInteger(metadata.height) || metadata.height < 2 || metadata.height > 4096 || sampleRate !== 0.1 || !Number.isInteger(faceCount) || faceCount < 0 || faceCount > 1200) {
+                if (previewKey !== `${prefix}/preview.mp4` || thumbnailKey !== `${prefix}/poster.jpg` || !metadata || metadata.fileSize !== photo.fileSize || !Number.isInteger(metadata.durationMs) || metadata.durationMs < 1 || metadata.durationMs > 120000 || !Number.isInteger(metadata.width) || metadata.width < 2 || metadata.width > 4096 || !Number.isInteger(metadata.height) || metadata.height < 2 || metadata.height > 4096 || ![0.1, 1].includes(sampleRate) || !Number.isInteger(faceCount) || faceCount < 0 || faceCount > 12000) {
                     return { status: 400, message: 'Resultado de video invalido' };
                 }
                 await photo.update({ previewKey, thumbnailKey, durationMs: metadata.durationMs, width: metadata.width, height: metadata.height, faceCount,

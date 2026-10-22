@@ -47,7 +47,7 @@ exports.handler = async (event, context) => {
             const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: originalKey }), { abortSignal: AbortSignal.timeout(120000) });
             await pipeline(response.Body, createWriteStream(source));
             if ((await fs.stat(source)).size !== fileSize) throw new Error('Original incompleto no S3');
-            prepared = await prepareVideo(source);
+            prepared = await prepareVideo(source, { sampleRate: 1 });
             const prefix = `events/${eventId}/videos/${id}/v${processingVersion}`;
             const previewKey = `${prefix}/preview.mp4`;
             const thumbnailKey = `${prefix}/poster.jpg`;
@@ -65,6 +65,10 @@ exports.handler = async (event, context) => {
                 const faces = (result.FaceRecords || []).map(record => ({
                     faceId: record.Face.FaceId, confidence: record.Face.Confidence,
                     boundingBox: record.Face.BoundingBox, timestampMs: frame.timestampMs
+                }));
+                console.log(JSON.stringify({
+                    videoId: id, timestampMs: frame.timestampMs, indexed: faces.length,
+                    unindexed: (result.UnindexedFaces || []).map(face => face.Reasons)
                 }));
                 await callback({ action: 'faces', originalKey, owner, processingVersion, faces });
                 faceCount += faces.length;

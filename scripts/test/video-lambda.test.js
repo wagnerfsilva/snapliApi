@@ -28,7 +28,7 @@ beforeEach(() => {
     global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ data: { claimed: true, id: 'video', eventId: 'event', processingVersion: 1, fileSize: 100 } }) }));
     mockS3Send.mockResolvedValue({ Body: 'source' });
     mockFaceSend.mockResolvedValue({ FaceRecords: [{ Face: { FaceId: 'face', Confidence: 99 } }] });
-    prepareVideo.mockResolvedValue({ directory: '/fake/output', previewPath: '/fake/preview.mp4', posterPath: '/fake/poster.jpg', metadata: { durationMs: 89637, width: 720, height: 1280 }, sampleRate: 0.1, frames: [{ filePath: '/fake/frame.jpg', timestampMs: 10000 }] });
+    prepareVideo.mockResolvedValue({ directory: '/fake/output', previewPath: '/fake/preview.mp4', posterPath: '/fake/poster.jpg', metadata: { durationMs: 89637, width: 720, height: 1280 }, sampleRate: 1, frames: [{ filePath: '/fake/frame.jpg', timestampMs: 10000 }] });
 });
 
 afterAll(() => { global.fetch = originalFetch; });
@@ -38,7 +38,8 @@ test('S3 video Lambda processes media and persists frames through authenticated 
     const payloads = global.fetch.mock.calls.map(call => JSON.parse(call[1].body));
     expect(payloads.map(payload => payload.action)).toEqual(['claim', 'faces', 'completed']);
     expect(payloads[1]).toMatchObject({ faces: [{ faceId: 'face', timestampMs: 10000 }] });
-    expect(payloads[2]).toMatchObject({ sampleRate: 0.1, faceCount: 1, previewKey: 'events/event/videos/video/v1/preview.mp4' });
+    expect(prepareVideo).toHaveBeenCalledWith(expect.any(String), { sampleRate: 1 });
+    expect(payloads[2]).toMatchObject({ sampleRate: 1, faceCount: 1, previewKey: 'events/event/videos/video/v1/preview.mp4' });
     expect(global.fetch.mock.calls[0][1].headers['x-lambda-secret']).toBe('test-secret');
     expect(mockFaceSend.mock.calls[0][0].input).toMatchObject({ CollectionId: 'existing', ExternalImageId: 'video_video_v1_t10000' });
 });

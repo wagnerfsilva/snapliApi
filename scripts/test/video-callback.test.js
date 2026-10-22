@@ -93,11 +93,11 @@ test('frame callbacks cannot extend the lease beyond the Lambda timeout', async 
 
 test('completion is transactional and increments videoCount exactly once', async () => {
     await send('claim');
-    const result = { previewKey: 'events/event/videos/video/v1/preview.mp4', thumbnailKey: 'events/event/videos/video/v1/poster.jpg', sampleRate: 0.1, faceCount: 2, metadata: { fileSize: 100, durationMs: 89637, width: 720, height: 1280 } };
+    const result = { previewKey: 'events/event/videos/video/v1/preview.mp4', thumbnailKey: 'events/event/videos/video/v1/poster.jpg', sampleRate: 1, faceCount: 2, metadata: { fileSize: 100, durationMs: 89637, width: 720, height: 1280 } };
     await send('completed', result);
     await send('completed', result);
     expect(photo.processingStatus).toBe('completed');
-    expect(photo.metadata.sampleRate).toBe(0.1);
+    expect(photo.metadata.sampleRate).toBe(1);
     expect(Event.increment).toHaveBeenCalledTimes(1);
 });
 

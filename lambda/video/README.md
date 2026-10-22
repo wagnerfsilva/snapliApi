@@ -6,7 +6,7 @@ The container uses the official AWS Node.js 22 runtime and isolated FFmpeg
 libraries. Build only for `linux/amd64`; the bundled loader requires x86_64.
 
 The handler validates media, creates a marked poster and MP4 preview, indexes
-one unmarked frame every 10 seconds in the existing Rekognition collection, and
+one unmarked frame every second in the existing Rekognition collection, and
 persists results through authenticated API callbacks. Originals are not replaced
 with previews. Existing completed videos are not reprocessed during rollout.
 Photo and video watermarks use the shared SVG generator at

@@ -107,7 +107,8 @@ S3 notifications; this is a configuration check, not an AWS health probe.
 Upload start returns 503 when that configuration is disabled or incomplete.
 See [video Lambda deployment](../lambda/video/README.md) for the rollout order.
 
-Frames are sampled every 10 seconds (0.1 FPS) and indexed in the existing Rekognition collection.
+Frames are sampled every second (1 FPS) and indexed in the existing Rekognition collection.
+The Lambda logs, per frame, how many faces were indexed and the reasons for rejected faces.
 This applies to newly processed videos; completed videos are not reprocessed automatically.
 Face IDs map to video, timestamp and processing version in `media_faces`. Search
 deduplicates videos, retaining maximum similarity and matched timestamps. It does
