@@ -60,8 +60,8 @@ freebies, or vice versa. `freeVideosCount` must be an integer from 0 to 3;
 omitting it on partial updates preserves its value. Photographers can update pricing
 only for their own events.
 
-Before deploying this change, run `npm run migrate` to apply
-`20261024000001-add-free-videos-count-to-events.js`. Existing events start with
+The Railway start command runs `npm run migrate` before the server, applying
+`20261024000001-add-free-videos-count-to-events.js` on deploy. Existing events start with
 zero free videos; their photo promotions are preserved and are not copied to
 videos. Deploy the updated API and frontend together so displayed totals and
 PIX charges use the same independent promotions.

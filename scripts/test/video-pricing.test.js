@@ -228,12 +228,12 @@ describe('mixed order pricing', () => {
 
     test('video freebies migration defaults existing events to zero without copying photo promotions', async () => {
         const freeVideosMigration = require('../../src/migrations/20261024000001-add-free-videos-count-to-events');
-        const queryInterface = { addColumn: jest.fn(), removeColumn: jest.fn() };
-        await freeVideosMigration.up(queryInterface, require('sequelize'));
-        expect(queryInterface.addColumn).toHaveBeenCalledTimes(1);
-        expect(queryInterface.addColumn).toHaveBeenCalledWith('events', 'freeVideosCount', expect.objectContaining({ defaultValue: 0, allowNull: false }));
+        const queryInterface = { sequelize: { query: jest.fn() } };
+        await freeVideosMigration.up(queryInterface);
+        expect(queryInterface.sequelize.query).toHaveBeenCalledTimes(1);
+        expect(queryInterface.sequelize.query.mock.calls[0][0]).toMatch(/ADD COLUMN IF NOT EXISTS "freeVideosCount" INTEGER NOT NULL DEFAULT 0/);
         await freeVideosMigration.down(queryInterface);
-        expect(queryInterface.removeColumn).toHaveBeenCalledWith('events', 'freeVideosCount');
+        expect(queryInterface.sequelize.query.mock.calls[1][0]).toMatch(/DROP COLUMN IF EXISTS "freeVideosCount"/);
     });
 
     test('client-supplied price and media type never override database values', async () => {

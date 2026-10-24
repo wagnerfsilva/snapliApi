@@ -1,15 +1,13 @@
 'use strict';
 
 module.exports = {
-    async up(queryInterface, Sequelize) {
-        await queryInterface.addColumn('events', 'freeVideosCount', {
-            type: Sequelize.INTEGER,
-            allowNull: false,
-            defaultValue: 0
-        });
+    async up(queryInterface) {
+        await queryInterface.sequelize.query(
+            'ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "freeVideosCount" INTEGER NOT NULL DEFAULT 0'
+        );
     },
 
     async down(queryInterface) {
-        await queryInterface.removeColumn('events', 'freeVideosCount');
+        await queryInterface.sequelize.query('ALTER TABLE "events" DROP COLUMN IF EXISTS "freeVideosCount"');
     }
 };
