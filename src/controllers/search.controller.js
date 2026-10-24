@@ -110,7 +110,8 @@ class SearchController {
                     createdAt: photo.createdAt,
                     similarity: photo.mediaType === 'video' ? Math.max(0, ...similarities) : match?.similarity || 0,
                     matchedTimestampsMs: [...new Set(faces.map(face => face.timestampMs))].sort((first, second) => first - second),
-                    ...(await previewUrls(photo))
+                    // preview.mp4 já tem a marca d'água embutida e vive no bucket de marca d'água
+                    ...(await previewUrls(photo, { includeVideoPreview: true }))
                 };
             }));
 

@@ -36,12 +36,25 @@ test('same collection matches yield one video, highest similarity and timestamps
     const result = await search();
     expect(rekognition.searchFacesByImage).toHaveBeenCalledTimes(1);
     expect(result.photos).toHaveLength(1);
-    expect(result.photos[0]).toMatchObject({ mediaType: 'video', similarity: 99, matchedTimestampsMs: [1000, 2000], thumbnailUrl: 'signed:poster.jpg', watermarkedUrl: 'signed:poster.jpg' });
-    expect(result.photos[0]).not.toHaveProperty('previewUrl');
-    expect(s3.generatePresignedUrl).toHaveBeenCalledTimes(1);
-    expect(s3.generatePresignedUrl).not.toHaveBeenCalledWith('marked.mp4', expect.anything(), expect.anything());
+    expect(result.photos[0]).toMatchObject({ mediaType: 'video', similarity: 99, matchedTimestampsMs: [1000, 2000], thumbnailUrl: 'signed:poster.jpg', watermarkedUrl: 'signed:poster.jpg', previewUrl: 'signed:marked.mp4' });
+    expect(s3.generatePresignedUrl).toHaveBeenCalledTimes(2);
+    expect(s3.generatePresignedUrl).toHaveBeenCalledWith('marked.mp4', 'watermarked', 3600);
     expect(s3.generatePresignedUrl.mock.calls.every(call => call[1] === 'watermarked')).toBe(true);
-    expect(result.photos[0]).not.toHaveProperty('originalKey');
+});
+
+test('customer search never exposes original keys, original URLs or original-bucket signatures', async () => {
+    const result = await search([{ ...video, originalKey: 'events/e/originals/secret.mov', originalUrl: 'secret' }]);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('originalKey');
+    expect(s3.generatePresignedUrl.mock.calls.map(call => call[0])).toEqual(expect.not.arrayContaining(['events/e/originals/secret.mov']));
+    expect(s3.generatePresignedUrl.mock.calls.every(call => call[1] === 'watermarked')).toBe(true);
+});
+
+test('customer search does not sign a preview for a video without a processed watermarked preview', async () => {
+    const result = await search([{ ...video, previewKey: null }]);
+    expect(result.photos).toEqual([]);
+    expect(s3.generatePresignedUrl).not.toHaveBeenCalled();
 });
 
 test('video previews are omitted by default and require an explicit protected-context opt-in', async () => {
