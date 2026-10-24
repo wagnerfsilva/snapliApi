@@ -16,10 +16,16 @@ async function getEventSalesSummary(eventId) {
         `
         SELECT
             COUNT(*) AS "totalOrders",
-            COALESCE(SUM(sub."totalAmount"), 0) AS "totalRevenue",
+            COALESCE(SUM(sub."eventRevenue"), 0) AS "totalRevenue",
             COALESCE(SUM(sub."itemCount"), 0) AS "totalPhotosSold"
         FROM (
-            SELECT o.id AS "orderId", o."totalAmount", COUNT(oi.id) AS "itemCount"
+            SELECT o.id AS "orderId",
+                o."totalAmount" * SUM(oi.price) / NULLIF((
+                    SELECT SUM(all_items.price)
+                    FROM order_items all_items
+                    WHERE all_items."orderId" = o.id
+                ), 0) AS "eventRevenue",
+                COUNT(oi.id) AS "itemCount"
             FROM orders o
             INNER JOIN order_items oi ON oi."orderId" = o.id
             INNER JOIN photos p ON p.id = oi."photoId"

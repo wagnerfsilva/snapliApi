@@ -99,14 +99,20 @@ class EventController {
                     include: [
                         [
                             literal(`(
-                                SELECT COALESCE(SUM(sub."totalAmount"), 0)
+                                SELECT COALESCE(SUM(sub."eventRevenue"), 0)
                                 FROM (
-                                    SELECT DISTINCT o.id, o."totalAmount"
+                                    SELECT o.id,
+                                        o."totalAmount" * SUM(oi.price) / NULLIF((
+                                            SELECT SUM(all_items.price)
+                                            FROM order_items all_items
+                                            WHERE all_items."orderId" = o.id
+                                        ), 0) AS "eventRevenue"
                                     FROM orders o
                                     INNER JOIN order_items oi ON oi."orderId" = o.id
                                     INNER JOIN photos p ON p.id = oi."photoId"
                                     WHERE p."eventId" = "Event"."id"
                                     AND o.status IN ('paid', 'completed')
+                                    GROUP BY o.id, o."totalAmount"
                                 ) sub
                             )`),
                             'totalRevenue'
