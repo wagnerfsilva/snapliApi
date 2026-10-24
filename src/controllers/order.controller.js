@@ -31,7 +31,7 @@ exports.createOrder = async (req, res) => {
             include: [{
                 model: Event,
                 as: 'event',
-                attributes: ['id', 'name', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'photoCount', 'freePhotosCount', 'isActive', 'videoEnabled', 'pricePerVideo', 'videoPricingPackages', 'allVideosPrice']
+                attributes: ['id', 'name', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'photoCount', 'freePhotosCount', 'freeVideosCount', 'isActive', 'videoEnabled', 'pricePerVideo', 'videoPricingPackages', 'allVideosPrice']
             }]
         });
 

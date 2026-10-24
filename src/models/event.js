@@ -67,6 +67,16 @@ module.exports = (sequelize, DataTypes) => {
             },
             comment: 'Quantidade de fotos grátis na compra (máx. 3)'
         },
+        freeVideosCount: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 0,
+            validate: {
+                min: 0,
+                max: 3,
+                isInt: true
+            }
+        },
         videoEnabled: {
             type: DataTypes.BOOLEAN,
             allowNull: false,

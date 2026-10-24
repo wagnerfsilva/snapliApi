@@ -41,7 +41,8 @@ Authenticated `POST /events` and `PUT /events/:id` accept:
     { "quantity": 3, "price": "50.00" },
     { "quantity": 5, "price": "75.00" }
   ],
-  "allVideosPrice": "100.00"
+  "allVideosPrice": "100.00",
+  "freeVideosCount": 0
 }
 ```
 
@@ -52,9 +53,18 @@ cleared using `null`; omitted fields are preserved on partial updates.
 `allVideosPrice` corresponds to the existing photo option "Todas as Fotos", shown
 as "Todos os Videos". It follows the same selected-item pricing rule and does not
 grant access to unselected items. Videos use their own prices and packages, with
-the same event `freePhotosCount` configuration applied separately to each media
-group, always retaining at least one paid item. Photographers can update pricing
+independent freebies: `freePhotosCount` applies only to photos, and
+`freeVideosCount` only to videos. Each promotion requires at least one paid item
+of the same type in the same event; buying videos never qualifies for photo
+freebies, or vice versa. `freeVideosCount` must be an integer from 0 to 3;
+omitting it on partial updates preserves its value. Photographers can update pricing
 only for their own events.
+
+Before deploying this change, run `npm run migrate` to apply
+`20261024000001-add-free-videos-count-to-events.js`. Existing events start with
+zero free videos; their photo promotions are preserved and are not copied to
+videos. Deploy the updated API and frontend together so displayed totals and
+PIX charges use the same independent promotions.
 
 ### Order Compatibility
 

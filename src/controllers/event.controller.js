@@ -8,7 +8,8 @@ function videoPricingFields(body, current = {}) {
         videoEnabled: current.videoEnabled ?? false,
         pricePerVideo: current.pricePerVideo ?? null,
         videoPricingPackages: current.videoPricingPackages ?? null,
-        allVideosPrice: current.allVideosPrice ?? null
+        allVideosPrice: current.allVideosPrice ?? null,
+        freeVideosCount: current.freeVideosCount ?? 0
     };
     for (const field of Object.keys(fields)) {
         if (body[field] !== undefined) fields[field] = body[field];

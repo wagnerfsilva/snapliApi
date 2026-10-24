@@ -13,6 +13,9 @@ function toCents(value) {
 }
 
 function validateVideoPricing(event) {
+    if (event.freeVideosCount !== undefined && (!Number.isInteger(event.freeVideosCount) || event.freeVideosCount < 0 || event.freeVideosCount > 3)) {
+        throw new Error('Quantidade de videos gratis deve ser inteira entre 0 e 3');
+    }
     if (typeof event.videoEnabled !== 'boolean') throw new Error('videoEnabled deve ser booleano');
     if (event.videoEnabled || event.pricePerVideo != null) toCents(event.pricePerVideo);
     if (event.allVideosPrice != null) toCents(event.allVideosPrice);
@@ -33,7 +36,7 @@ function quoteVideos(count, event) {
     validateVideoPricing(event);
     if (!event.videoEnabled) throw new Error('Venda de videos desabilitada neste evento');
     const unit = toCents(event.pricePerVideo);
-    const freeCount = Math.max(0, Math.min(event.freePhotosCount || 0, count - 1));
+    const freeCount = Math.max(0, Math.min(event.freeVideosCount || 0, count - 1));
     const paidCount = count - freeCount;
     const packages = (event.videoPricingPackages ?? []).map(pack => ({
         quantity: pack.quantity,

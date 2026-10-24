@@ -22,10 +22,20 @@ const migration = require('../../src/migrations/20261002000001-add-video-foundat
 
 const pricing = { videoEnabled: true, pricePerVideo: '10.00', videoPricingPackages: [] };
 
-test('videos use their own price and the same event freebies as photos', () => {
+test('photo freebies never discount videos', () => {
     const quote = quoteVideos(3, { ...pricing, pricePerPhoto: 1, freePhotosCount: 3 });
+    assert.equal(quote.total, 30);
+    assert.deepEqual(quote.itemPrices, [10, 10, 10]);
+});
+
+test('videos use only their own freebies and retain at least one paid video', () => {
+    const quote = quoteVideos(3, { ...pricing, freePhotosCount: 0, freeVideosCount: 3 });
     assert.equal(quote.total, 10);
     assert.deepEqual(quote.itemPrices, [0, 0, 10]);
+});
+
+test.each([-1, 4, 1.5, '3', null])('rejects invalid video freebies: %j', freeVideosCount => {
+    assert.throws(() => quoteVideos(3, { ...pricing, freeVideosCount }));
 });
 
 test('uses largest packages first exactly like photo pricing', () => {
@@ -64,7 +74,7 @@ describe('video event configuration', () => {
         const res = response();
         Event.create.mockResolvedValue({ id: 'event', name: 'Event' });
         await eventController.create({ body: { name: 'Event' }, userId: 'owner' }, res, jest.fn());
-        expect(Event.create.mock.calls[0][0]).toMatchObject({ videoEnabled: false, pricePerVideo: null });
+        expect(Event.create.mock.calls[0][0]).toMatchObject({ videoEnabled: false, pricePerVideo: null, freeVideosCount: 0 });
         expect(res.status).toHaveBeenCalledWith(201);
     });
 
@@ -77,9 +87,22 @@ describe('video event configuration', () => {
 
     test('partial update preserves existing video packages and price', async () => {
         const update = jest.fn();
-        Event.findByPk.mockResolvedValue({ ...pricing, videoPricingPackages: [{ quantity: 3, price: '20.00' }], createdBy: 'owner', update });
+        Event.findByPk.mockResolvedValue({ ...pricing, freeVideosCount: 2, videoPricingPackages: [{ quantity: 3, price: '20.00' }], createdBy: 'owner', update });
         await eventController.update({ params: { id: 'event' }, body: { name: 'Renamed' }, userRole: 'fotografo', userId: 'owner' }, response(), jest.fn());
-        expect(update.mock.calls[0][0]).toMatchObject({ name: 'Renamed', ...pricing, videoPricingPackages: [{ quantity: 3, price: '20.00' }] });
+        expect(update.mock.calls[0][0]).toMatchObject({ name: 'Renamed', ...pricing, freeVideosCount: 2, videoPricingPackages: [{ quantity: 3, price: '20.00' }] });
+    });
+
+    test('creation stores photo and video promotions independently', async () => {
+        Event.create.mockResolvedValue({ id: 'event', name: 'Event' });
+        await eventController.create({ body: { ...pricing, freePhotosCount: 3, freeVideosCount: 1 }, userId: 'owner' }, response(), jest.fn());
+        expect(Event.create.mock.calls[0][0]).toMatchObject({ freePhotosCount: 3, freeVideosCount: 1 });
+    });
+
+    test('partial update can disable video freebies without changing photo freebies', async () => {
+        const update = jest.fn();
+        Event.findByPk.mockResolvedValue({ ...pricing, freePhotosCount: 3, freeVideosCount: 2, createdBy: 'owner', update });
+        await eventController.update({ params: { id: 'event' }, body: { freeVideosCount: 0 }, userRole: 'fotografo', userId: 'owner' }, response(), jest.fn());
+        expect(update.mock.calls[0][0]).toMatchObject({ freeVideosCount: 0, freePhotosCount: undefined });
     });
 
     test('another photographer cannot edit video pricing', async () => {
@@ -133,8 +156,8 @@ describe('mixed order pricing', () => {
         expect(OrderItem.create.mock.calls.map(call => call[0].price)).toEqual([10, 12.5]);
     });
 
-    test('all-video price applies event freebies and rateio sums exactly to the PIX amount', async () => {
-        const media = [0, 1, 2].map(index => ({ ...video, id: `video${index}`, event: { ...event, allVideosPrice: '10.00' } }));
+    test('all-video price applies only video freebies and rateio sums exactly to the PIX amount', async () => {
+        const media = [0, 1, 2].map(index => ({ ...video, id: `video${index}`, event: { ...event, freeVideosCount: 1, allVideosPrice: '10.00' } }));
         await submit(media);
         expect(OrderItem.create.mock.calls.map(call => call[0].price)).toEqual([0, 5, 5]);
         expect(pixService.createPixPayment.mock.calls[0][0].amount).toBe(10);
@@ -146,7 +169,7 @@ describe('mixed order pricing', () => {
         { quantity: 6, freePhotosCount: 2, packages: [{ quantity: 3, price: 15 }], allPrice: '12.00' },
         { quantity: 1, freePhotosCount: 3, packages: [], allPrice: null }
     ])('photo and video totals match for identical pricing: %j', async configuration => {
-        const sharedEvent = { ...event, freePhotosCount: configuration.freePhotosCount, pricePerPhoto: '10.00', pricingPackages: configuration.packages, allPhotosPrice: configuration.allPrice, videoPricingPackages: configuration.packages, allVideosPrice: configuration.allPrice };
+        const sharedEvent = { ...event, freePhotosCount: configuration.freePhotosCount, freeVideosCount: configuration.freePhotosCount, pricePerPhoto: '10.00', pricingPackages: configuration.packages, allPhotosPrice: configuration.allPrice, videoPricingPackages: configuration.packages, allVideosPrice: configuration.allPrice };
         await submit(Array.from({ length: configuration.quantity }, (_, index) => ({ ...photo, id: `photo${index}`, event: sharedEvent })));
         const photoTotal = Order.create.mock.calls[0][0].totalAmount;
         Order.create.mockClear();
@@ -154,6 +177,40 @@ describe('mixed order pricing', () => {
         await submit(Array.from({ length: configuration.quantity }, (_, index) => ({ ...video, id: `video${index}`, event: sharedEvent })));
         expect(Order.create.mock.calls[0][0].totalAmount).toBe(photoTotal);
         expect(OrderItem.create.mock.calls.slice(0, Math.min(configuration.freePhotosCount, configuration.quantity - 1)).map(call => call[0].price)).toEqual(Array(Math.min(configuration.freePhotosCount, configuration.quantity - 1)).fill(0));
+    });
+
+    test.each([
+        { freePhotosCount: 3, freeVideosCount: 0, photoTotal: 5, videoTotal: 40 },
+        { freePhotosCount: 0, freeVideosCount: 3, photoTotal: 20, videoTotal: 10 },
+        { freePhotosCount: 3, freeVideosCount: 1, photoTotal: 5, videoTotal: 30 }
+    ])('mixed order isolates promotions and PIX: %j', async configuration => {
+        const sharedEvent = { ...event, ...configuration };
+        const media = [
+            ...Array.from({ length: 4 }, (_, index) => ({ ...photo, id: `photo${index}`, event: sharedEvent })),
+            ...Array.from({ length: 4 }, (_, index) => ({ ...video, id: `video${index}`, event: sharedEvent }))
+        ];
+        const res = await submit(media);
+        expect(res.status).toHaveBeenCalledWith(201);
+        const prices = OrderItem.create.mock.calls.map(call => call[0].price);
+        expect(prices.slice(0, 4).reduce((sum, price) => sum + price, 0)).toBe(configuration.photoTotal);
+        expect(prices.slice(4).reduce((sum, price) => sum + price, 0)).toBe(configuration.videoTotal);
+        expect(pixService.createPixPayment.mock.calls[0][0].amount).toBe(configuration.photoTotal + configuration.videoTotal);
+    });
+
+    test('a paid item of another media type does not qualify a single item for freebies', async () => {
+        const sharedEvent = { ...event, freePhotosCount: 3, freeVideosCount: 3 };
+        await submit([{ ...photo, event: sharedEvent }, { ...video, event: sharedEvent }]);
+        expect(OrderItem.create.mock.calls.map(call => call[0].price)).toEqual([5, 10]);
+    });
+
+    test('video freebies do not cross event boundaries', async () => {
+        await submit([
+            video,
+            { ...video, id: 'video2', event: { ...event, freeVideosCount: 1 } },
+            { ...video, id: 'video3', eventId: 'event2', event: { ...event, id: 'event2', freeVideosCount: 0 } },
+            { ...video, id: 'video4', eventId: 'event2', event: { ...event, id: 'event2', freeVideosCount: 0 } }
+        ].map(item => item.eventId === 'event' ? { ...item, event: { ...event, freeVideosCount: 1 } } : item));
+        expect(OrderItem.create.mock.calls.map(call => call[0].price)).toEqual([0, 10, 10, 10]);
     });
 
     test.each([
@@ -167,6 +224,16 @@ describe('mixed order pricing', () => {
         expect(res.status).toHaveBeenCalledWith(400);
         expect(Order.create).not.toHaveBeenCalled();
         expect(pixService.createPixPayment).not.toHaveBeenCalled();
+    });
+
+    test('video freebies migration defaults existing events to zero without copying photo promotions', async () => {
+        const freeVideosMigration = require('../../src/migrations/20261024000001-add-free-videos-count-to-events');
+        const queryInterface = { addColumn: jest.fn(), removeColumn: jest.fn() };
+        await freeVideosMigration.up(queryInterface, require('sequelize'));
+        expect(queryInterface.addColumn).toHaveBeenCalledTimes(1);
+        expect(queryInterface.addColumn).toHaveBeenCalledWith('events', 'freeVideosCount', expect.objectContaining({ defaultValue: 0, allowNull: false }));
+        await freeVideosMigration.down(queryInterface);
+        expect(queryInterface.removeColumn).toHaveBeenCalledWith('events', 'freeVideosCount');
     });
 
     test('client-supplied price and media type never override database values', async () => {
