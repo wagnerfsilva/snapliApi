@@ -4,6 +4,7 @@ const router = express.Router();
 // Import route modules
 const authRoutes = require('./auth.routes');
 const eventRoutes = require('./event.routes');
+const agendaRoutes = require('./agenda.routes');
 const photoRoutes = require('./photo.routes');
 const searchRoutes = require('./search.routes');
 const downloadRoutes = require('./download.routes');
@@ -32,6 +33,7 @@ router.get('/health', (req, res) => {
 // Mount routes
 router.use('/auth', authRoutes);
 router.use('/events', eventRoutes);
+router.use('/agenda', agendaRoutes);
 router.use('/photos', photoRoutes);
 router.use('/videos', videoRoutes);
 router.use('/search', searchRoutes);

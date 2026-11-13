@@ -8,6 +8,49 @@ API RESTful para o sistema Snapli de gerenciamento de fotos com reconhecimento f
 
 ---
 
+## Agenda
+
+Execute `npm run migrate` para aplicar `20261113000002-create-agenda-entries`
+antes de disponibilizar a agenda. A nova tabela usa RLS para bloquear acesso
+público direto, seguindo as tabelas existentes; a conexão da API deve manter
+seu acesso server-side. Nenhum evento existente é alterado.
+
+Todos os endpoints exigem Bearer token com papel `admin`, `fotografo` ou
+`organizador`.
+
+### GET /agenda?startDate=2026-11-01&endDate=2026-11-30
+
+Datas obrigatórias em `AAAA-MM-DD`, com intervalo inclusivo. Retorna
+`{ success: true, data: { items: [{ id, title, date, description, source }] } }`,
+ordenado por data e título, sem truncar eventos por paginação.
+
+- `source: "agenda"`: compromissos pessoais apenas do usuário autenticado.
+- `source: "event"`: eventos de fotos nas mesmas permissões da listagem existente:
+  todos para admin, próprios para fotógrafo e vinculados para organizador.
+- A identidade de um item é o par `source` + `id`.
+- Datas representam dias inteiros. Eventos existentes mantêm o dia UTC usado
+  pelo formulário de eventos, sem deslocamento para o dia anterior pelo fuso.
+
+### POST /agenda
+
+```json
+{
+  "title": "Ensaio",
+  "date": "2026-11-13",
+  "description": "Encontro na praça"
+}
+```
+
+Título obrigatório (até 255 caracteres), data válida em `AAAA-MM-DD` e descrição
+opcional (até 5000 caracteres). Retorna HTTP 201 com
+`{ success: true, data: { item: { id, title, date, description, source: "agenda" } } }`.
+A propriedade do compromisso vem exclusivamente do token. Não cria um evento
+de fotos nem altera as permissões existentes de criação de eventos.
+Entradas inválidas retornam HTTP 400 com os erros de validação.
+
+Rollback: `npm run migrate:undo` remove a nova tabela se esta for a última
+migração aplicada; faça backup dos compromissos antes de removê-la.
+
 ## Video Pilot
 
 Videos share the existing facial search, cart, PIX and paid-download workflow.
