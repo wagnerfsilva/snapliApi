@@ -261,49 +261,40 @@ class SearchController {
             }
 
             // Admin: global stats
-            const totalPhotos = await Photo.count({
-                where: { processingStatus: 'completed' }
-            });
-
-            const photosWithFaces = await Photo.count({
-                where: {
-                    processingStatus: 'completed',
-                    faceCount: { [Op.gt]: 0 }
-                }
-            });
-
-            const totalEvents = await Event.count({
-                where: { isActive: true }
-            });
-
-            const totalFaces = await Photo.sum('faceCount', {
-                where: { processingStatus: 'completed' }
-            });
-
-            // Sales statistics
-            const totalPhotosSold = await OrderItem.count({
-                include: [{
-                    model: Order,
-                    as: 'order',
+            // Single pass over photos (served by the covering index on processingStatus, faceCount)
+            const [[photoStats], totalEvents, totalPhotosSold, totalRevenue] = await Promise.all([
+                sequelize.query(
+                    `SELECT COUNT(*)::int AS "totalPhotos",
+                            (COUNT(*) FILTER (WHERE "faceCount" > 0))::int AS "photosWithFaces",
+                            COALESCE(SUM("faceCount"), 0)::int AS "totalFaces"
+                     FROM photos
+                     WHERE "processingStatus" = 'completed'`,
+                    { type: QueryTypes.SELECT }
+                ),
+                Event.count({ where: { isActive: true } }),
+                OrderItem.count({
+                    include: [{
+                        model: Order,
+                        as: 'order',
+                        where: {
+                            status: { [Op.in]: ['paid', 'completed'] }
+                        }
+                    }]
+                }),
+                Order.sum('totalAmount', {
                     where: {
                         status: { [Op.in]: ['paid', 'completed'] }
                     }
-                }]
-            });
-
-            const totalRevenue = await Order.sum('totalAmount', {
-                where: {
-                    status: { [Op.in]: ['paid', 'completed'] }
-                }
-            });
+                })
+            ]);
 
             res.json({
                 success: true,
                 data: {
-                    totalPhotos,
-                    photosWithFaces,
+                    totalPhotos: photoStats.totalPhotos,
+                    photosWithFaces: photoStats.photosWithFaces,
                     totalEvents,
-                    totalFaces: totalFaces || 0,
+                    totalFaces: photoStats.totalFaces || 0,
                     totalPhotosSold: totalPhotosSold || 0,
                     totalRevenue: parseFloat(totalRevenue || 0).toFixed(2)
                 }
