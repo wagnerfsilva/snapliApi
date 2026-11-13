@@ -48,6 +48,17 @@ A propriedade do compromisso vem exclusivamente do token. Não cria um evento
 de fotos nem altera as permissões existentes de criação de eventos.
 Entradas inválidas retornam HTTP 400 com os erros de validação.
 
+### DELETE /agenda/:id
+
+Remove somente um compromisso pessoal criado pelo usuário autenticado.
+A exclusão é feita com `id` e `userId` do token na mesma operação; nem
+administradores podem remover compromissos de outros usuários.
+Não remove eventos de fotos.
+
+Retorna HTTP 200 com `{ success: true, message: "Compromisso removido com sucesso" }`.
+IDs inválidos retornam HTTP 400. Compromissos inexistentes ou de outro usuário
+retornam HTTP 404, sem revelar se o registro existe. Não requer nova migração.
+
 Rollback: `npm run migrate:undo` remove a nova tabela se esta for a última
 migração aplicada; faça backup dos compromissos antes de removê-la.
 

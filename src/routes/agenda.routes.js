@@ -1,5 +1,5 @@
 const express = require('express');
-const { body, query } = require('express-validator');
+const { body, query, param } = require('express-validator');
 const { authenticate, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const controller = require('../controllers/agenda.controller');
@@ -30,5 +30,9 @@ router.post('/', [
     body('description').optional().isString().bail()
         .isLength({ max: 5000 }).withMessage('Descrição deve ter no máximo 5000 caracteres')
 ], validate, controller.create);
+
+router.delete('/:id', [
+    param('id').isUUID().withMessage('Identificador do compromisso inválido')
+], validate, controller.delete);
 
 module.exports = router;

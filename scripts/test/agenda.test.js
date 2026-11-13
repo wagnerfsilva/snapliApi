@@ -1,7 +1,7 @@
 'use strict';
 
 jest.mock('../../src/models', () => ({
-    AgendaEntry: { findAll: jest.fn(), create: jest.fn() },
+    AgendaEntry: { findAll: jest.fn(), create: jest.fn(), destroy: jest.fn() },
     Event: { findAll: jest.fn() },
     User: { findByPk: jest.fn() }
 }));
@@ -19,6 +19,7 @@ const jwtConfig = require('../../src/config/jwt');
 const { Op } = require('sequelize');
 const { AgendaEntry, Event, User } = require('../../src/models');
 const router = require('../../src/routes/agenda.routes');
+const entryId = 'c0d582d7-b530-41a2-88fa-6e9d178e9b08';
 
 const app = express();
 app.use(express.json());
@@ -156,4 +157,55 @@ test('database failures propagate instead of returning an empty agenda or a succ
         .send({ title: 'Evento', date: '2026-11-13' });
     expect(creation.status).toBe(500);
     expect(creation.body.success).toBe(false);
+});
+
+test.each(['admin', 'fotografo', 'organizador'])('%s can remove only their own personal entry', async role => {
+    const storedEntries = [{ id: entryId, userId: 'owner' }];
+    AgendaEntry.destroy.mockImplementation(async ({ where }) => {
+        const index = storedEntries.findIndex(entry => entry.id === where.id && entry.userId === where.userId);
+        if (index < 0) return 0;
+        storedEntries.splice(index, 1);
+        return 1;
+    });
+
+    const denied = await request(app).delete(`/agenda/${entryId}`)
+        .query({ userId: 'owner' }).auth(token(role, 'other-user'), { type: 'bearer' })
+        .send({ userId: 'owner' });
+    expect(denied.status).toBe(404);
+    expect(denied.body.success).toBe(false);
+    expect(storedEntries).toHaveLength(1);
+    expect(AgendaEntry.destroy).toHaveBeenLastCalledWith({
+        where: { id: entryId, userId: 'other-user' }
+    });
+
+    const removed = await request(app).delete(`/agenda/${entryId}`)
+        .auth(token(role, 'owner'), { type: 'bearer' });
+    expect(removed.status).toBe(200);
+    expect(removed.body.success).toBe(true);
+    expect(storedEntries).toHaveLength(0);
+
+    const repeated = await request(app).delete(`/agenda/${entryId}`)
+        .auth(token(role, 'owner'), { type: 'bearer' });
+    expect(repeated.status).toBe(404);
+    expect(repeated.body.success).toBe(false);
+});
+
+test('removing an invalid ID is rejected without querying the database', async () => {
+    const response = await request(app).delete('/agenda/invalid-id').auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(400);
+    expect(AgendaEntry.destroy).not.toHaveBeenCalled();
+});
+
+test('unauthenticated and unsupported users cannot remove personal entries', async () => {
+    expect((await request(app).delete(`/agenda/${entryId}`)).status).toBe(401);
+    expect((await request(app).delete(`/agenda/${entryId}`)
+        .auth(token('client'), { type: 'bearer' })).status).toBe(403);
+    expect(AgendaEntry.destroy).not.toHaveBeenCalled();
+});
+
+test('delete failures are propagated without reporting success', async () => {
+    AgendaEntry.destroy.mockRejectedValue(new Error('Delete failed'));
+    const response = await request(app).delete(`/agenda/${entryId}`).auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(500);
+    expect(response.body.success).toBe(false);
 });

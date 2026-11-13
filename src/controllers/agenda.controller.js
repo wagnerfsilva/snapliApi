@@ -71,6 +71,23 @@ class AgendaController {
             next(error);
         }
     }
+
+    async delete(req, res, next) {
+        try {
+            const deleted = await AgendaEntry.destroy({
+                where: { id: req.params.id, userId: req.userId }
+            });
+            if (!deleted) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Compromisso não encontrado ou não pertence a você'
+                });
+            }
+            res.json({ success: true, message: 'Compromisso removido com sucesso' });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 module.exports = new AgendaController();
