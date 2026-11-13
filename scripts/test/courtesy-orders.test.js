@@ -1,7 +1,7 @@
 'use strict';
 
 jest.mock('../../src/models', () => ({
-    Order: { create: jest.fn(), findByPk: jest.fn(), findOne: jest.fn(), findAndCountAll: jest.fn(), destroy: jest.fn() },
+    Order: { create: jest.fn(), findByPk: jest.fn(), findOne: jest.fn(), findAll: jest.fn(), findAndCountAll: jest.fn(), destroy: jest.fn() },
     OrderItem: { bulkCreate: jest.fn(), create: jest.fn() },
     Photo: { findAll: jest.fn(), destroy: jest.fn() },
     Event: {},
@@ -25,6 +25,7 @@ jest.mock('../../src/config/jwt', () => ({
 const express = require('express');
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
+const { Op } = require('sequelize');
 const jwtConfig = require('../../src/config/jwt');
 const { Order, OrderItem, Photo, User, sequelize } = require('../../src/models');
 const pix = require('../../src/services/pix.service');
@@ -42,9 +43,9 @@ app.use(express.json({ limit: '1mb' }));
 app.use('/orders', orderRoutes);
 app.use('/downloads', downloadRoutes);
 
-function token(role = 'admin') {
+function token(role = 'admin', claims = {}) {
     User.findByPk.mockResolvedValue({ id: 'admin-id', role, isActive: true });
-    return jwt.sign({ userId: 'admin-id' }, jwtConfig.secret, {
+    return jwt.sign({ ...claims, userId: 'admin-id' }, jwtConfig.secret, {
         issuer: jwtConfig.issuer, audience: jwtConfig.audience, expiresIn: '5m'
     });
 }
@@ -71,6 +72,7 @@ beforeEach(() => {
     Photo.findAll.mockResolvedValue([media()]);
     Order.findByPk.mockResolvedValue(null);
     Order.findOne.mockResolvedValue(null);
+    Order.findAll.mockResolvedValue([]);
     Order.findAndCountAll.mockResolvedValue({ count: 0, rows: [] });
     Order.destroy.mockResolvedValue(0);
 });
@@ -395,4 +397,102 @@ test('list and deletion failures are explicit and logged', async () => {
     expect(response.status).toBe(500);
     expect(response.body.success).toBeUndefined();
     expect(logger.error).toHaveBeenCalledTimes(2);
+});
+
+test.each([null, 'fotografo', 'organizador'])('courtesy details by ID reject role %s without exposing recipient data', async role => {
+    Order.findByPk.mockResolvedValue({ id: photoId, status: 'courtesy', customerName: 'Private recipient', items: [] });
+    let req = request(app).get(`/orders/${photoId}`);
+    if (role) req = req.auth(token(role, { role: 'admin' }), { type: 'bearer' });
+    const response = await req;
+    expect(response.status).toBe(403);
+    expect(response.body.order).toBeUndefined();
+    expect(response.body.items).toBeUndefined();
+});
+
+test('admin can read courtesy details by ID', async () => {
+    Order.findByPk.mockResolvedValue({ id: photoId, status: 'courtesy', items: [] });
+    const response = await request(app).get(`/orders/${photoId}`).auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(200);
+    expect(response.body.order.status).toBe('courtesy');
+});
+
+test.each(['pending', 'paid', 'completed'])('ordinary %s checkout details remain public', async status => {
+    Order.findByPk.mockResolvedValue({ id: photoId, status, items: [] });
+    const response = await request(app).get(`/orders/${photoId}`);
+    expect(response.status).toBe(200);
+    expect(response.body.order.status).toBe(status);
+    expect(User.findByPk).not.toHaveBeenCalled();
+});
+
+test.each(['fotografo', 'organizador'])('courtesy token generation rejects %s even with a forged admin claim', async role => {
+    const save = jest.fn();
+    for (const downloadToken of [null, 'existing-private-token']) {
+        Order.findByPk.mockResolvedValue({ status: 'courtesy', downloadToken, items: [], save });
+        const response = await request(app).post(`/downloads/generate/${photoId}`)
+            .auth(token(role, { role: 'admin' }), { type: 'bearer' });
+        expect(response.status).toBe(403);
+        expect(response.body.downloadToken).toBeUndefined();
+        expect(response.body.downloadUrl).toBeUndefined();
+    }
+    expect(save).not.toHaveBeenCalled();
+});
+
+test.each(['fotografo', 'organizador'])('ordinary paid token retrieval remains available to authenticated %s', async role => {
+    Order.findByPk.mockResolvedValue({ status: 'paid', downloadToken: 'paid-token', items: [] });
+    const response = await request(app).post(`/downloads/generate/${photoId}`)
+        .auth(token(role), { type: 'bearer' });
+    expect(response.status).toBe(200);
+    expect(response.body.downloadToken).toBe('paid-token');
+});
+
+test.each(['fotografo', 'organizador'])('generic listings exclude courtesy for %s regardless of status filter shape', async role => {
+    for (const query of [{}, { status: 'paid' }, { status: ['paid', 'courtesy'] }]) {
+        const response = await request(app).get('/orders').query(query)
+            .auth(token(role, { role: 'admin' }), { type: 'bearer' });
+        expect(response.status).toBe(200);
+        const options = Order.findAll.mock.calls.at(-1)[0];
+        expect(options.where[Op.and]).toEqual([{ status: { [Op.ne]: 'courtesy' } }]);
+        if (query.status) expect(options.where.status).toEqual(query.status);
+    }
+});
+
+test.each(['fotografo', 'organizador'])('generic explicit courtesy listing rejects %s before querying orders', async role => {
+    const response = await request(app).get('/orders?status=courtesy')
+        .auth(token(role), { type: 'bearer' });
+    expect(response.status).toBe(403);
+    expect(Order.findAll).not.toHaveBeenCalled();
+});
+
+test('admin retains courtesy access through the generic listing', async () => {
+    Order.findAll.mockResolvedValue([{ id: photoId, status: 'courtesy', items: [] }]);
+    const response = await request(app).get('/orders?status=courtesy').auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(200);
+    expect(response.body.orders[0].status).toBe('courtesy');
+    expect(Order.findAll.mock.calls[0][0].where).toEqual({ status: 'courtesy' });
+});
+
+test('event listing excludes courtesy before loading orders for photographers', async () => {
+    const response = await request(app).get('/orders/event/event-id')
+        .auth(token('fotografo'), { type: 'bearer' });
+    expect(response.status).toBe(200);
+    expect(Order.findAll.mock.calls[0][0].where).toEqual({ status: { [Op.ne]: 'courtesy' } });
+});
+
+test('organizers remain blocked from event order details', async () => {
+    const response = await request(app).get('/orders/event/event-id')
+        .auth(token('organizador'), { type: 'bearer' });
+    expect(response.status).toBe(403);
+    expect(Order.findAll).not.toHaveBeenCalled();
+});
+
+test('admin retains courtesy links in the event listing', async () => {
+    Order.findAll.mockResolvedValue([{
+        id: photoId, status: 'courtesy', items: [{}], downloadToken: 'private-courtesy-token'
+    }]);
+    const response = await request(app).get('/orders/event/event-id').auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(200);
+    expect(response.body.orders[0]).toMatchObject({
+        status: 'courtesy', downloadToken: 'private-courtesy-token',
+        downloadUrl: expect.stringMatching(/\/downloads\/private-courtesy-token$/)
+    });
 });

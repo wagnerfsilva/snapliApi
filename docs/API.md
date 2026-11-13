@@ -55,6 +55,18 @@ o link pode baixar os originais selecionados. O e-mail da cortesia não é expos
 na consulta pública por token. A busca facial existente (`POST /search/face`)
 pode ser usada antes da seleção; o admin deve conferir os resultados.
 
+O gerenciamento também é exclusivo de admin nos caminhos alternativos:
+`GET /orders/:orderId` e `POST /downloads/generate/:orderId` retornam 403
+para cortesias quando o solicitante não é admin. A consulta por ID aceita
+autenticação opcional para preservar o checkout público de pedidos comuns.
+Nas listagens `GET /orders` e `GET /orders/event/:eventId`, cortesias são
+excluídas da consulta ao banco para não administradores; pedir explicitamente
+`GET /orders?status=courtesy` sem papel admin retorna 403. Organizadores
+continuam sem acesso aos detalhes de pedidos por evento.
+O papel é consultado no cadastro ativo pelo middleware, não aceito de campos
+enviados pelo cliente. O portal e os downloads públicos por token válido
+continuam funcionando sem login; não é necessário regenerar os links existentes.
+
 Dados inválidos ou arquivos indisponíveis retornam 400, ausência de login 401,
 papel sem permissão 403 e falha de persistência 500, sem link de sucesso.
 Rotas de pagamento/PIX/sincronização e envio de e-mail rejeitam cortesias;

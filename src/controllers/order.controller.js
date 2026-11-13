@@ -4,6 +4,7 @@ const pixService = require('../services/pix.service');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 const { quoteVideos } = require('../services/video-pricing.service');
+const { Op } = require('sequelize');
 
 exports.listCourtesyOrders = async (req, res) => {
     try {
@@ -373,8 +374,9 @@ exports.getOrder = async (req, res) => {
             return res.status(404).json({ error: 'Pedido não encontrado' });
         }
 
-        // Only allow access to own order or if admin
-        // For now, return order (add authentication later if needed)
+        if (order.status === 'courtesy' && req.userRole !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores podem consultar pedidos cortesia' });
+        }
 
         res.json({
             order: {
@@ -405,7 +407,7 @@ exports.getOrder = async (req, res) => {
 };
 
 /**
- * List orders (admin only - add auth middleware later)
+ * List orders, excluding courtesy for non-admin users
  */
 exports.listOrders = async (req, res) => {
     try {
@@ -414,6 +416,12 @@ exports.listOrders = async (req, res) => {
         const where = {};
         if (status) {
             where.status = status;
+        }
+        if (req.userRole !== 'admin') {
+            if (status === 'courtesy') {
+                return res.status(403).json({ error: 'Apenas administradores podem listar pedidos cortesia' });
+            }
+            where[Op.and] = [{ status: { [Op.ne]: 'courtesy' } }];
         }
 
         const safeLimit  = Math.min(Math.max(parseInt(limit)  || 50, 1), 100);
@@ -852,6 +860,7 @@ exports.listOrdersByEvent = async (req, res) => {
         }
 
         const orders = await Order.findAll({
+            where: req.userRole === 'admin' ? {} : { status: { [Op.ne]: 'courtesy' } },
             include: [{
                 model: OrderItem,
                 as: 'items',

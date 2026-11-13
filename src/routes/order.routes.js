@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/order.controller');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
 const { body, query, param } = require('express-validator');
 const validate = require('../middleware/validate');
 
@@ -29,8 +29,8 @@ router.post('/courtesy', authenticate, authorize('admin'), [
     body('items.*.photoId').isUUID().withMessage('Identificador de arquivo invalido')
 ], validate, orderController.createCourtesyOrder);
 
-// Get order by ID (public for now, can add auth later)
-router.get('/:orderId', orderController.getOrder);
+// Ordinary checkout remains public; courtesy details require an authenticated admin.
+router.get('/:orderId', optionalAuth, orderController.getOrder);
 
 // Validate payment status
 router.get('/:orderId/validate-payment', orderController.validatePayment);

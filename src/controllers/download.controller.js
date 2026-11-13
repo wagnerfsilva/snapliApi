@@ -7,7 +7,7 @@ const { previewUrls } = require('../services/media-preview.service');
 const { canDownloadOrder } = require('../utils/order-download');
 
 /**
- * Generate download token for paid order
+ * Generate download token for paid orders or admin-managed courtesy
  */
 exports.generateDownloadToken = async (req, res) => {
     try {
@@ -28,7 +28,10 @@ exports.generateDownloadToken = async (req, res) => {
             return res.status(404).json({ error: 'Pedido não encontrado' });
         }
 
-        // Only paid orders can have download tokens
+        if (order.status === 'courtesy' && req.userRole !== 'admin') {
+            return res.status(403).json({ error: 'Apenas administradores podem obter links de pedidos cortesia' });
+        }
+
         if (!canDownloadOrder(order)) {
             return res.status(400).json({ error: 'Pedido ainda não foi pago' });
         }
