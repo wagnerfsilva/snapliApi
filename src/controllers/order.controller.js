@@ -1,9 +1,76 @@
-const { Order, OrderItem, Photo, Event } = require('../models');
+const { Order, OrderItem, Photo, Event, sequelize } = require('../models');
 const emailService = require('../services/email.service');
 const pixService = require('../services/pix.service');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 const { quoteVideos } = require('../services/video-pricing.service');
+
+exports.createCourtesyOrder = async (req, res) => {
+    const { customerName, customerEmail, items } = req.body;
+    if (typeof customerName !== 'string' || !customerName.trim() || customerName.trim().length > 255) {
+        return res.status(400).json({ error: 'Nome do destinatario e obrigatorio (ate 255 caracteres)' });
+    }
+    const email = typeof customerEmail === 'string' ? customerEmail.trim() : customerEmail;
+    if (!Array.isArray(items) || !items.length || items.length > 1000) {
+        return res.status(400).json({ error: 'Selecione entre 1 e 1000 arquivos' });
+    }
+    const photoIds = items.map(item => item?.photoId);
+    if (photoIds.some(id => typeof id !== 'string') || new Set(photoIds).size !== photoIds.length) {
+        return res.status(400).json({ error: 'Itens invalidos ou duplicados no pedido' });
+    }
+
+    try {
+        const order = await sequelize.transaction(async transaction => {
+            const photos = await Photo.findAll({
+                where: { id: photoIds },
+                include: [{ model: Event, as: 'event', required: true }],
+                transaction,
+                lock: transaction.LOCK.SHARE
+            });
+            if (photos.length !== photoIds.length || photos.some(photo =>
+                photo.processingStatus !== 'completed' || !photo.originalKey || !photo.event?.isActive ||
+                (photo.mediaType === 'video' && (!photo.event.videoEnabled || !photo.previewKey))
+            )) {
+                return null;
+            }
+            const created = await Order.create({
+                customerName: customerName.trim(),
+                customerEmail: email || null,
+                createdBy: req.userId,
+                status: 'courtesy',
+                totalAmount: 0,
+                paidAt: null,
+                paymentId: null,
+                paymentMethod: null,
+                paymentLink: null,
+                downloadToken: crypto.randomBytes(32).toString('hex'),
+                downloadExpiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+            }, { transaction });
+            await OrderItem.bulkCreate(photoIds.map(photoId => ({
+                orderId: created.id, photoId, price: 0
+            })), { transaction, validate: true });
+            return created;
+        });
+        if (!order) {
+            return res.status(400).json({ error: 'Um ou mais arquivos estao indisponiveis para cortesia. Refaca a busca.' });
+        }
+        logger.info('Pedido cortesia criado', { orderId: order.id, createdBy: req.userId, itemCount: items.length });
+        return res.status(201).json({
+            success: true,
+            order: {
+                id: order.id,
+                status: order.status,
+                customerName: order.customerName,
+                itemCount: items.length,
+                downloadUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/downloads/${order.downloadToken}`,
+                downloadExpiresAt: order.downloadExpiresAt
+            }
+        });
+    } catch (error) {
+        logger.error('Erro ao criar pedido cortesia', { error: error.message, createdBy: req.userId });
+        return res.status(500).json({ error: 'Erro ao criar pedido cortesia' });
+    }
+};
 
 /**
  * Create new order
@@ -348,6 +415,10 @@ exports.validatePayment = async (req, res) => {
             return res.status(404).json({ error: 'Pedido não encontrado' });
         }
 
+        if (order.status === 'courtesy') {
+            return res.status(400).json({ error: 'Pedido cortesia nao possui pagamento' });
+        }
+
         // Se já está pago, retorna sucesso
         if (order.status === 'paid') {
             return res.json({
@@ -439,6 +510,10 @@ exports.getPixQrCode = async (req, res) => {
 
         if (!order) {
             return res.status(404).json({ error: 'Pedido não encontrado' });
+        }
+
+        if (order.status === 'courtesy') {
+            return res.status(400).json({ error: 'Pedido cortesia nao possui pagamento' });
         }
 
         // Se não tem paymentId, tenta criar o pagamento PIX agora
@@ -535,6 +610,11 @@ exports.asaasWebhook = async (req, res) => {
             // Busca o pedido pelo ID
             const order = await Order.findByPk(result.externalReference);
 
+            if (order?.status === 'courtesy') {
+                logger.warn('Webhook ignorado para pedido cortesia', { orderId: order.id });
+                return res.status(200).json({ received: true, ignored: true });
+            }
+
             if (order && order.status !== 'paid') {
                 // Atualiza pedido para pago
                 order.status = 'paid';
@@ -595,6 +675,10 @@ exports.confirmPaymentManually = async (req, res) => {
 
         if (order.status === 'paid') {
             return res.status(400).json({ error: 'Pedido já está pago' });
+        }
+
+        if (order.status === 'courtesy') {
+            return res.status(400).json({ error: 'Pedido cortesia nao possui pagamento' });
         }
 
         // Confirma pagamento manualmente
@@ -661,6 +745,10 @@ exports.simulatePayment = async (req, res) => {
 
         if (order.status === 'paid') {
             return res.status(400).json({ error: 'Pedido já está pago' });
+        }
+
+        if (order.status === 'courtesy') {
+            return res.status(400).json({ error: 'Pedido cortesia nao possui pagamento' });
         }
 
         // Simulate payment confirmation
@@ -768,6 +856,10 @@ exports.syncOrderWithAsaas = async (req, res) => {
 
         if (!order) {
             return res.status(404).json({ error: 'Pedido não encontrado' });
+        }
+
+        if (order.status === 'courtesy') {
+            return res.status(400).json({ error: 'Pedido cortesia nao possui pagamento' });
         }
 
         if (!order.paymentId) {

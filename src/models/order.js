@@ -18,7 +18,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         customerEmail: {
             type: DataTypes.STRING,
-            allowNull: false,
+            allowNull: true,
             validate: {
                 isEmail: true
             }
@@ -27,8 +27,13 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING,
             allowNull: false
         },
+        createdBy: {
+            type: DataTypes.UUID,
+            allowNull: true,
+            references: { model: 'users', key: 'id' }
+        },
         status: {
-            type: DataTypes.ENUM('pending', 'processing', 'paid', 'completed', 'cancelled', 'refunded'),
+            type: DataTypes.ENUM('pending', 'processing', 'paid', 'completed', 'cancelled', 'refunded', 'courtesy'),
             defaultValue: 'pending',
             allowNull: false
         },
@@ -91,6 +96,10 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     Order.associate = function (models) {
+        Order.belongsTo(models.User, {
+            foreignKey: 'createdBy',
+            as: 'creator'
+        });
         // Order belongs to User (optional)
         Order.belongsTo(models.User, {
             foreignKey: 'userId',

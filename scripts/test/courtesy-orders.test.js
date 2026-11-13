@@ -1,0 +1,305 @@
+'use strict';
+
+jest.mock('../../src/models', () => ({
+    Order: { create: jest.fn(), findByPk: jest.fn(), findOne: jest.fn() },
+    OrderItem: { bulkCreate: jest.fn(), create: jest.fn() },
+    Photo: { findAll: jest.fn() },
+    Event: {},
+    User: { findByPk: jest.fn() },
+    sequelize: { transaction: jest.fn() }
+}));
+jest.mock('../../src/services/pix.service', () => ({
+    createPixPayment: jest.fn(), validatePixPayment: jest.fn(),
+    getPixQrCode: jest.fn(), handleAsaasWebhook: jest.fn(), confirmPixPaymentManually: jest.fn()
+}));
+jest.mock('../../src/services/email.service', () => ({ sendDownloadEmail: jest.fn() }));
+jest.mock('../../src/services/s3.service', () => ({ generatePresignedUrl: jest.fn(async () => 'signed-original') }));
+jest.mock('../../src/services/media-preview.service', () => ({
+    previewUrls: jest.fn(async photo => ({ mediaType: photo.mediaType, previewUrl: 'signed-preview' }))
+}));
+jest.mock('../../src/utils/logger', () => ({ error: jest.fn(), info: jest.fn(), warn: jest.fn() }));
+jest.mock('../../src/config/jwt', () => ({
+    secret: 'courtesy-test-secret-only', issuer: 'snapli-test', audience: 'snapli-test'
+}));
+
+const express = require('express');
+const request = require('supertest');
+const jwt = require('jsonwebtoken');
+const jwtConfig = require('../../src/config/jwt');
+const { Order, OrderItem, Photo, User, sequelize } = require('../../src/models');
+const pix = require('../../src/services/pix.service');
+const email = require('../../src/services/email.service');
+const storage = require('../../src/services/s3.service');
+const controller = require('../../src/controllers/order.controller');
+const orderRoutes = require('../../src/routes/order.routes');
+const downloadRoutes = require('../../src/routes/download.routes');
+const logger = require('../../src/utils/logger');
+const photoId = 'c0d582d7-b530-41a2-88fa-6e9d178e9b08';
+const videoId = 'c0d582d7-b530-41a2-88fa-6e9d178e9b09';
+const transaction = { LOCK: { SHARE: 'SHARE' } };
+const app = express();
+app.use(express.json({ limit: '1mb' }));
+app.use('/orders', orderRoutes);
+app.use('/downloads', downloadRoutes);
+
+function token(role = 'admin') {
+    User.findByPk.mockResolvedValue({ id: 'admin-id', role, isActive: true });
+    return jwt.sign({ userId: 'admin-id' }, jwtConfig.secret, {
+        issuer: jwtConfig.issuer, audience: jwtConfig.audience, expiresIn: '5m'
+    });
+}
+
+function media(id = photoId, mediaType = 'photo') {
+    return {
+        id, mediaType, originalKey: `original/${id}`, originalFilename: 'original.jpg',
+        processingStatus: 'completed', previewKey: 'preview',
+        event: { id: 'event', isActive: true, videoEnabled: true }
+    };
+}
+
+function postCourtesy(body = {}) {
+    return request(app).post('/orders/courtesy').auth(token(), { type: 'bearer' }).send({
+        customerName: ' Destinatario ', items: [{ photoId }], ...body
+    });
+}
+
+beforeEach(() => {
+    jest.clearAllMocks();
+    sequelize.transaction.mockImplementation(callback => callback(transaction));
+    Order.create.mockImplementation(async data => ({ id: 'order-id', ...data }));
+    OrderItem.bulkCreate.mockResolvedValue([]);
+    Photo.findAll.mockResolvedValue([media()]);
+    Order.findByPk.mockResolvedValue(null);
+    Order.findOne.mockResolvedValue(null);
+});
+
+test.each([null, 'fotografo', 'organizador'])('rejects courtesy creation for role %s', async role => {
+    let req = request(app).post('/orders/courtesy');
+    if (role) req = req.auth(token(role), { type: 'bearer' });
+    const response = await req.send({ customerName: 'Pessoa', items: [{ photoId }] });
+    expect(response.status).toBe(role ? 403 : 401);
+    expect(Order.create).not.toHaveBeenCalled();
+});
+
+test.each([undefined, null, '', ' person@example.com '])('creates a mixed courtesy with optional email %s and no payment or email side effects', async customerEmail => {
+    Photo.findAll.mockResolvedValue([media(), media(videoId, 'video')]);
+    const before = Date.now();
+    const response = await postCourtesy({
+        customerEmail, items: [{ photoId }, { photoId: videoId }],
+        status: 'paid', totalAmount: 99, createdBy: 'attacker', paidAt: new Date().toISOString(),
+        paymentId: 'fake', downloadToken: 'guessable', downloadExpiresAt: '2100-01-01'
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.order).toMatchObject({
+        id: 'order-id', customerName: 'Destinatario', itemCount: 2, status: 'courtesy'
+    });
+    const [data, options] = Order.create.mock.calls[0];
+    expect(options.transaction).toBe(transaction);
+    expect(data).toMatchObject({
+        customerEmail: customerEmail ? customerEmail.trim() : null,
+        createdBy: 'admin-id', status: 'courtesy', totalAmount: 0,
+        paymentId: null, paymentMethod: null, paymentLink: null, paidAt: null
+    });
+    expect(data.downloadToken).toMatch(/^[a-f0-9]{64}$/);
+    expect(response.body.order.downloadUrl.endsWith(`/downloads/${data.downloadToken}`)).toBe(true);
+    const expires = new Date(response.body.order.downloadExpiresAt).getTime();
+    expect(expires).toBeGreaterThanOrEqual(before + 90 * 86400000);
+    expect(expires).toBeLessThanOrEqual(Date.now() + 90 * 86400000);
+    expect(OrderItem.bulkCreate).toHaveBeenCalledWith([
+        { orderId: 'order-id', photoId, price: 0 },
+        { orderId: 'order-id', photoId: videoId, price: 0 }
+    ], { transaction, validate: true });
+    expect(pix.createPixPayment).not.toHaveBeenCalled();
+    expect(email.sendDownloadEmail).not.toHaveBeenCalled();
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(data.downloadToken);
+});
+
+test('accepts exactly 1000 distinct files', async () => {
+    const ids = Array.from({ length: 1000 }, () => require('crypto').randomUUID());
+    Photo.findAll.mockResolvedValue(ids.map(id => media(id)));
+    const response = await postCourtesy({ items: ids.map(id => ({ photoId: id })) });
+    expect(response.status).toBe(201);
+    expect(response.body.order.itemCount).toBe(1000);
+});
+
+test.each([
+    { customerName: '  ' }, { customerName: 123 }, { customerName: 'x'.repeat(256) },
+    { customerEmail: 'not-an-email' }, { customerEmail: false }, { customerEmail: [] },
+    { items: [] }, { items: null }, { items: [{ photoId: 'bad-id' }] },
+    { items: [{ photoId }, { photoId }] },
+    { items: Array.from({ length: 1001 }, () => ({ photoId })) }
+])('rejects invalid input %j before persistence', async body => {
+    expect((await postCourtesy(body)).status).toBe(400);
+    expect(Order.create).not.toHaveBeenCalled();
+});
+
+test.each([
+    [], [media(), media(videoId)],
+    [{ ...media(), originalKey: null }],
+    [{ ...media(), processingStatus: 'pending' }],
+    [{ ...media(), event: { isActive: false } }],
+    [{ ...media(photoId, 'video'), event: { isActive: true, videoEnabled: false } }],
+    [{ ...media(photoId, 'video'), previewKey: null }]
+].map(files => [files]))('rejects unavailable files without creating partial orders', async files => {
+    Photo.findAll.mockResolvedValue(files);
+    expect((await postCourtesy()).status).toBe(400);
+    expect(Order.create).not.toHaveBeenCalled();
+    expect(OrderItem.bulkCreate).not.toHaveBeenCalled();
+});
+
+test('propagates item persistence failure out of the managed transaction and never returns a link', async () => {
+    OrderItem.bulkCreate.mockRejectedValueOnce(new Error('item persistence failed'));
+    let transactionFailure;
+    sequelize.transaction.mockImplementation(async callback => {
+        try {
+            return await callback(transaction);
+        } catch (error) {
+            transactionFailure = error;
+            throw error;
+        }
+    });
+    const response = await postCourtesy();
+    expect(response.status).toBe(500);
+    expect(response.body.order).toBeUndefined();
+    expect(transactionFailure.message).toBe('item persistence failed');
+    expect(logger.error).toHaveBeenCalled();
+});
+
+test('download URLs are not exposed until the transaction commits', async () => {
+    let commit;
+    const committed = new Promise(resolve => { commit = resolve; });
+    let staged;
+    const created = new Promise(resolve => { staged = resolve; });
+    sequelize.transaction.mockImplementation(async callback => {
+        const order = await callback(transaction);
+        staged();
+        await committed;
+        return order;
+    });
+    let responded = false;
+    const pending = postCourtesy().then(response => { responded = true; return response; });
+    await created;
+    expect(responded).toBe(false);
+    commit();
+    expect((await pending).status).toBe(201);
+});
+
+test.each(['validate-payment', 'pix-qrcode'])('courtesy rejects public payment action %s', async action => {
+    Order.findByPk.mockResolvedValue({ status: 'courtesy' });
+    expect((await request(app).get(`/orders/order-id/${action}`)).status).toBe(400);
+    expect(pix.createPixPayment).not.toHaveBeenCalled();
+    expect(pix.validatePixPayment).not.toHaveBeenCalled();
+    expect(pix.getPixQrCode).not.toHaveBeenCalled();
+});
+
+test('courtesy rejects Asaas sync and email resend', async () => {
+    Order.findByPk.mockResolvedValue({ status: 'courtesy', paymentId: 'unexpected' });
+    const auth = token();
+    expect((await request(app).post('/orders/order-id/sync-asaas').auth(auth, { type: 'bearer' })).status).toBe(400);
+    expect((await request(app).post('/downloads/resend/order-id').auth(auth, { type: 'bearer' })).status).toBe(400);
+    expect(pix.validatePixPayment).not.toHaveBeenCalled();
+    expect(email.sendDownloadEmail).not.toHaveBeenCalled();
+});
+
+test.each(['confirmPaymentManually', 'simulatePayment'])('courtesy rejects development action %s', async action => {
+    const original = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    try {
+        Order.findByPk.mockResolvedValue({ status: 'courtesy' });
+        const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+        await controller[action]({ params: { orderId: 'order-id' } }, res);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(pix.confirmPixPaymentManually).not.toHaveBeenCalled();
+        expect(email.sendDownloadEmail).not.toHaveBeenCalled();
+    } finally {
+        process.env.NODE_ENV = original;
+    }
+});
+
+test('Asaas webhook cannot transform courtesy into a sale', async () => {
+    pix.handleAsaasWebhook.mockResolvedValue({ processed: true, externalReference: 'order-id' });
+    const save = jest.fn();
+    Order.findByPk.mockResolvedValue({ id: 'order-id', status: 'courtesy', save });
+    const response = await request(app).post('/orders/webhook/asaas')
+        .set('asaas-access-token', process.env.ASAAS_WEBHOOK_TOKEN || 'test')
+        .send({ event: 'PAYMENT_CONFIRMED' });
+    expect(response.status).toBe(200);
+    expect(response.body.ignored).toBe(true);
+    expect(save).not.toHaveBeenCalled();
+    expect(email.sendDownloadEmail).not.toHaveBeenCalled();
+});
+
+test.each(['courtesy', 'paid', 'completed'])('public portal allows %s with no login and preserves media previews', async status => {
+    Order.findOne.mockResolvedValue({
+        id: 'order-id', status, customerEmail: 'private@example.com', createdBy: 'admin-id',
+        createdAt: '2026-11-13T00:00:00Z', downloadExpiresAt: new Date(Date.now() + 86400000),
+        items: [media(), media(videoId, 'video')].map(photo => ({ photo, price: 0 }))
+    });
+    const response = await request(app).get('/downloads/random-token');
+    expect(response.status).toBe(200);
+    expect(response.body.photos.map(photo => photo.mediaType)).toEqual(['photo', 'video']);
+    expect(response.body.order.createdBy).toBeUndefined();
+    expect(response.body.order.customerEmail).toBe(status === 'courtesy' ? undefined : 'private@example.com');
+});
+
+test.each(['photo', 'video'])('courtesy signs only the requested %s item original', async mediaType => {
+    const save = jest.fn();
+    Order.findOne.mockResolvedValue({
+        status: 'courtesy', downloadExpiresAt: new Date(Date.now() + 86400000),
+        items: [{ photo: media(photoId, mediaType), save }]
+    });
+    const response = await request(app).get(`/downloads/random-token/photo/${photoId}`);
+    expect(response.status).toBe(200);
+    expect(Order.findOne.mock.calls[0][0]).toMatchObject({
+        where: { downloadToken: 'random-token' }, include: [{ where: { photoId } }]
+    });
+    expect(storage.generatePresignedUrl).toHaveBeenCalledWith(`original/${photoId}`, 'original', 3600, { downloadFilename: 'original.jpg' });
+    expect(save).toHaveBeenCalled();
+});
+
+test.each([
+    [null, 404], [{ status: 'pending' }, 403], [{ status: 'cancelled' }, 403],
+    [{ status: 'courtesy', downloadExpiresAt: new Date(0) }, 410]
+])('rejects invalid, unauthorized or expired portal and original requests', async (order, status) => {
+    Order.findOne.mockResolvedValue(order);
+    expect((await request(app).get('/downloads/random-token')).status).toBe(status);
+    expect((await request(app).get(`/downloads/random-token/photo/${photoId}`)).status).toBe(status);
+    expect(storage.generatePresignedUrl).not.toHaveBeenCalled();
+});
+
+test('normal public checkout still requires email even when free-order fields are forged', async () => {
+    const response = await request(app).post('/orders').send({
+        customerName: 'Pessoa', status: 'courtesy', totalAmount: 0, items: [{ photoId }]
+    });
+    expect(response.status).toBe(400);
+    expect(Order.create).not.toHaveBeenCalled();
+});
+
+test('public checkout ignores forged courtesy and pricing fields and still creates a paid PIX charge', async () => {
+    Photo.findAll.mockResolvedValue([{
+        ...media(), eventId: 'event', event: { id: 'event', name: 'Evento', pricePerPhoto: 15, isActive: true }
+    }]);
+    Order.create.mockImplementation(async data => ({ id: 'order-id', ...data, update: jest.fn() }));
+    OrderItem.create.mockResolvedValue({});
+    Order.findByPk.mockResolvedValue({ items: [{}] });
+    pix.createPixPayment.mockResolvedValue({ id: 'payment-id', invoiceUrl: 'invoice' });
+    const response = await request(app).post('/orders').send({
+        customerName: 'Pessoa', customerEmail: 'person@example.com',
+        status: 'courtesy', totalAmount: 0, items: [{ photoId, price: 0 }]
+    });
+    expect(response.status).toBe(201);
+    expect(Order.create.mock.calls[0][0]).toMatchObject({ status: 'pending', totalAmount: 15 });
+    expect(pix.createPixPayment).toHaveBeenCalledWith(expect.objectContaining({ amount: 15 }));
+    expect(response.body.order).toMatchObject({ status: 'pending', totalAmount: 15, paymentId: 'payment-id' });
+});
+
+test('administrative token generation accepts courtesy without resetting its expiration', async () => {
+    const expiresAt = new Date(Date.now() + 86400000);
+    const save = jest.fn();
+    Order.findByPk.mockResolvedValue({ status: 'courtesy', downloadExpiresAt: expiresAt, items: [{}], save });
+    const response = await request(app).post('/downloads/generate/order-id').auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(200);
+    expect(response.body.downloadToken).toMatch(/^[a-f0-9]{64}$/);
+    expect(response.body.expiresAt).toBe(expiresAt.toISOString());
+    expect(save).toHaveBeenCalled();
+});

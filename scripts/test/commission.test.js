@@ -36,7 +36,7 @@ function executeSql(sql) {
     const result = spawnSync('sqlite3', ['-json', ':memory:', fixture + adjustment + sql], { encoding: 'utf8' });
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(result.stderr);
-    return JSON.parse(result.stdout);
+    return result.stdout.trim() ? JSON.parse(result.stdout) : [];
 }
 
 beforeEach(() => {
@@ -136,4 +136,27 @@ test('does not expose negative available balances after existing withdrawals', a
     const balance = await commissionService.getOrganizerEventBalance({ id: 'event-a', organizerCommissionPercentage: 10 });
     expect(balance.commissionTotal).toBe(3);
     expect(balance.availableBalance).toBe(0);
+});
+
+test('courtesy does not add sales, sold files, revenue, commission or withdrawal balance', async () => {
+    adjustment = `
+        INSERT INTO orders VALUES ('gift', 0, 'courtesy');
+        INSERT INTO order_items VALUES ('gift-photo', 'gift', 'photo-a', 0), ('gift-video', 'gift', 'video-b', 0);
+    `;
+    expect(await commissionService.getEventSalesSummary('event-a')).toMatchObject({
+        totalOrders: 1, totalRevenue: 30, totalPhotosSold: 2
+    });
+    expect(await commissionService.getOrganizerEventBalance({ id: 'event-a', organizerCommissionPercentage: 10 }))
+        .toMatchObject({ commissionTotal: 3, availableBalance: 3 });
+
+    const event = { id: 'event-a', setDataValue: jest.fn() };
+    Event.findAndCountAll.mockResolvedValue({ count: 1, rows: [event] });
+    sequelize.query.mockImplementation(async (sql, { replacements }) => executeSql(
+        sql.replace(/:eventIds/g, replacements.eventIds.map(id => `'${id}'`).join(','))
+    ));
+    const next = jest.fn();
+    await eventController.getAll({ query: {}, userRole: 'admin' }, { json: jest.fn() }, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(event.setDataValue).toHaveBeenCalledWith('paidOrdersCount', 1);
+    expect(event.setDataValue).toHaveBeenCalledWith('totalRevenue', 30);
 });

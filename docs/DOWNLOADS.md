@@ -6,12 +6,30 @@ O sistema de downloads permite que clientes que compraram fotos acessem e baixem
 
 ## 🔐 Segurança
 
-- **Token Único**: Cada pedido pago recebe um token único de 64 caracteres
-- **Expiração**: Links válidos por 90 dias após pagamento
+- **Token Único**: Cada pedido pago ou cortesia recebe um token único de 64 caracteres
+- **Expiração**: Links válidos por 90 dias após pagamento ou criação da cortesia
 - **URLs Pré-assinadas**: Downloads diretos do S3 com URLs temporárias (1h)
 - **Sem Autenticação**: Cliente não precisa criar conta, apenas acessar link
 
 ## 🚀 Fluxo Completo
+
+### Cortesia criada pelo admin
+
+O admin usa `POST /api/orders/courtesy` após buscar por foto e selecionar
+fotos/vídeos. O pedido tem status `courtesy`, preços zero e nenhum pagamento.
+O link `/downloads/{token}` já é retornado na criação para compartilhamento manual,
+sem e-mail automático. Qualquer pessoa com o link acessa o portal e baixa os
+originais dos itens selecionados, sem login, até a expiração de 90 dias.
+
+O portal informa **Cortesia — sem cobrança** e a data de criação, não uma data
+fictícia de pagamento. Na consulta pública por token, o e-mail da cortesia e
+o administrador criador não são expostos.
+
+Os downloads aceitam `paid`, `completed` e `courtesy`, sempre respeitando validade
+e pertencimento do arquivo ao pedido. Pedidos pendentes/cancelados continuam
+bloqueados. Cortesias não geram vendas, receita, comissões ou saldo de resgate.
+O reenvio de e-mail é exclusivo dos pedidos pagos; para cortesia, copie o link
+na tela de criação ou na listagem de pedidos do evento.
 
 ### 1. Criação do Pedido
 

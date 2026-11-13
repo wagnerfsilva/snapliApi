@@ -4,6 +4,7 @@ const emailService = require('../services/email.service');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 const { previewUrls } = require('../services/media-preview.service');
+const { canDownloadOrder } = require('../utils/order-download');
 
 /**
  * Generate download token for paid order
@@ -28,7 +29,7 @@ exports.generateDownloadToken = async (req, res) => {
         }
 
         // Only paid orders can have download tokens
-        if (order.status !== 'paid' && order.status !== 'completed') {
+        if (!canDownloadOrder(order)) {
             return res.status(400).json({ error: 'Pedido ainda não foi pago' });
         }
 
@@ -98,7 +99,7 @@ exports.getOrderByToken = async (req, res) => {
         }
 
         // Check if order is paid
-        if (order.status !== 'paid' && order.status !== 'completed') {
+        if (!canDownloadOrder(order)) {
             return res.status(403).json({ error: 'Pedido ainda não foi pago' });
         }
 
@@ -126,9 +127,10 @@ exports.getOrderByToken = async (req, res) => {
             order: {
                 id: order.id,
                 customerName: order.customerName,
-                customerEmail: order.customerEmail,
+                ...(order.status === 'courtesy' ? {} : { customerEmail: order.customerEmail }),
                 totalAmount: order.totalAmount,
                 paidAt: order.paidAt,
+                createdAt: order.createdAt,
                 downloadExpiresAt: order.downloadExpiresAt,
                 status: order.status
             },
@@ -173,7 +175,7 @@ exports.downloadPhoto = async (req, res) => {
         }
 
         // Check if order is paid
-        if (order.status !== 'paid' && order.status !== 'completed') {
+        if (!canDownloadOrder(order)) {
             return res.status(403).json({ error: 'Pedido ainda não foi pago' });
         }
 
@@ -242,6 +244,10 @@ exports.resendDownloadEmail = async (req, res) => {
 
         if (!order) {
             return res.status(404).json({ error: 'Pedido não encontrado' });
+        }
+
+        if (order.status === 'courtesy') {
+            return res.status(400).json({ error: 'Compartilhe o link do pedido cortesia manualmente' });
         }
 
         if (!order.downloadToken) {

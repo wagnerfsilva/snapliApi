@@ -8,6 +8,62 @@ API RESTful para o sistema Snapli de gerenciamento de fotos com reconhecimento f
 
 ---
 
+## Pedidos cortesia (admin)
+
+Antes de publicar a API, aplique `20261113000003-add-courtesy-orders` com
+`npm run migrate`. Ela adiciona o status `courtesy`, o administrador criador
+(`createdBy`) e permite e-mail nulo. O checkout público continua exigindo e-mail.
+
+### POST /orders/courtesy
+
+Exige `Authorization: Bearer {token}` e papel **admin**.
+
+```json
+{
+  "customerName": "Pessoa presenteada",
+  "customerEmail": null,
+  "items": [{ "photoId": "UUID-da-foto-ou-video" }]
+}
+```
+
+- Nome obrigatório (até 255 caracteres), e-mail opcional e válido quando informado.
+- Entre 1 e 1000 IDs UUID distintos de fotos/vídeos já processados, em eventos
+  ativos, com original disponível. Vídeos exigem habilitação no evento e prévia.
+- Pedido e itens são persistidos em uma transação. Valores, status, criador,
+  token e validade são definidos exclusivamente pelo servidor.
+- Não cria cobrança PIX nem envia e-mail; status `courtesy`, total e itens zero,
+  campos de pagamento nulos. Não entra em vendas, receita, comissões ou resgates.
+
+Resposta HTTP 201:
+
+```json
+{
+  "success": true,
+  "order": {
+    "id": "uuid",
+    "status": "courtesy",
+    "customerName": "Pessoa presenteada",
+    "itemCount": 1,
+    "downloadUrl": "https://web.snapli.com.br/downloads/token-aleatorio",
+    "downloadExpiresAt": "2027-02-11T12:00:00.000Z"
+  }
+}
+```
+
+O link permite acesso sem login por 90 dias desde a criação; qualquer pessoa com
+o link pode baixar os originais selecionados. O e-mail da cortesia não é exposto
+na consulta pública por token. A busca facial existente (`POST /search/face`)
+pode ser usada antes da seleção; o admin deve conferir os resultados.
+
+Dados inválidos ou arquivos indisponíveis retornam 400, ausência de login 401,
+papel sem permissão 403 e falha de persistência 500, sem link de sucesso.
+Rotas de pagamento/PIX/sincronização e envio de e-mail rejeitam cortesias;
+webhooks destinados a cortesias são reconhecidos e ignorados, com registro no log.
+
+Rollback: a migration recusa reversão se houver cortesias ou pedidos sem e-mail.
+Não remove pedidos nem inventa dados para restaurar o esquema antigo; planeje a
+preservação desses registros antes de reverter.
+
 ## Agenda
 
 Execute `npm run migrate` para aplicar `20261113000002-create-agenda-entries`
