@@ -1,5 +1,5 @@
 const { Event, Photo, User, sequelize } = require('../models');
-const { Op, literal } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
 const logger = require('../utils/logger');
 const { validateVideoPricing } = require('../services/video-pricing.service');
 
@@ -36,6 +36,62 @@ async function validateOrganizer(organizerId) {
         return 'Organizador está inativo';
     }
     return null;
+}
+
+// Computes revenue/paid orders/requested amount for the given events in 2 batched
+// queries (instead of correlated subqueries evaluated per event row).
+async function attachSalesMetrics(events) {
+    if (events.length === 0) return;
+    const eventIds = events.map(e => e.id);
+
+    const [salesRows, withdrawalRows] = await Promise.all([
+        sequelize.query(
+            `
+            WITH event_orders AS (
+                SELECT p."eventId", o.id AS "orderId", o."totalAmount", SUM(oi.price) AS "eventPrice"
+                FROM photos p
+                INNER JOIN order_items oi ON oi."photoId" = p.id
+                INNER JOIN orders o ON o.id = oi."orderId"
+                WHERE p."eventId" IN (:eventIds)
+                AND o.status IN ('paid', 'completed')
+                GROUP BY p."eventId", o.id, o."totalAmount"
+            ),
+            order_totals AS (
+                SELECT oi."orderId", SUM(oi.price) AS "orderPrice"
+                FROM order_items oi
+                WHERE oi."orderId" IN (SELECT DISTINCT "orderId" FROM event_orders)
+                GROUP BY oi."orderId"
+            )
+            SELECT eo."eventId",
+                COUNT(*) AS "paidOrdersCount",
+                COALESCE(SUM(eo."totalAmount" * eo."eventPrice" / NULLIF(ot."orderPrice", 0)), 0) AS "totalRevenue"
+            FROM event_orders eo
+            INNER JOIN order_totals ot ON ot."orderId" = eo."orderId"
+            GROUP BY eo."eventId"
+            `,
+            { replacements: { eventIds }, type: QueryTypes.SELECT }
+        ),
+        sequelize.query(
+            `
+            SELECT "eventId", COALESCE(SUM(amount), 0) AS "requestedAmount"
+            FROM withdrawal_requests
+            WHERE "eventId" IN (:eventIds)
+            AND status IN ('pending', 'approved', 'paid')
+            GROUP BY "eventId"
+            `,
+            { replacements: { eventIds }, type: QueryTypes.SELECT }
+        )
+    ]);
+
+    const sales = new Map(salesRows.map(r => [r.eventId, r]));
+    const withdrawals = new Map(withdrawalRows.map(r => [r.eventId, r]));
+
+    for (const event of events) {
+        const sale = sales.get(event.id);
+        event.setDataValue('totalRevenue', sale ? sale.totalRevenue : '0');
+        event.setDataValue('paidOrdersCount', sale ? sale.paidOrdersCount : '0');
+        event.setDataValue('requestedAmount', withdrawals.get(event.id)?.requestedAmount ?? '0');
+    }
 }
 
 class EventController {
@@ -95,50 +151,6 @@ class EventController {
                 limit: safeLimit,
                 offset,
                 order: [[sortBy, sortOrder]],
-                attributes: {
-                    include: [
-                        [
-                            literal(`(
-                                SELECT COALESCE(SUM(sub."eventRevenue"), 0)
-                                FROM (
-                                    SELECT o.id,
-                                        o."totalAmount" * SUM(oi.price) / NULLIF((
-                                            SELECT SUM(all_items.price)
-                                            FROM order_items all_items
-                                            WHERE all_items."orderId" = o.id
-                                        ), 0) AS "eventRevenue"
-                                    FROM orders o
-                                    INNER JOIN order_items oi ON oi."orderId" = o.id
-                                    INNER JOIN photos p ON p.id = oi."photoId"
-                                    WHERE p."eventId" = "Event"."id"
-                                    AND o.status IN ('paid', 'completed')
-                                    GROUP BY o.id, o."totalAmount"
-                                ) sub
-                            )`),
-                            'totalRevenue'
-                        ],
-                        [
-                            literal(`(
-                                SELECT COUNT(DISTINCT o.id)
-                                FROM orders o
-                                INNER JOIN order_items oi ON oi."orderId" = o.id
-                                INNER JOIN photos p ON p.id = oi."photoId"
-                                WHERE p."eventId" = "Event"."id"
-                                AND o.status IN ('paid', 'completed')
-                            )`),
-                            'paidOrdersCount'
-                        ],
-                        [
-                            literal(`(
-                                SELECT COALESCE(SUM(wr.amount), 0)
-                                FROM withdrawal_requests wr
-                                WHERE wr."eventId" = "Event"."id"
-                                AND wr.status IN ('pending', 'approved', 'paid')
-                            )`),
-                            'requestedAmount'
-                        ]
-                    ]
-                },
                 include: [
                     {
                         model: User,
@@ -152,6 +164,8 @@ class EventController {
                     }
                 ]
             });
+
+            await attachSalesMetrics(events);
 
             res.json({
                 success: true,
