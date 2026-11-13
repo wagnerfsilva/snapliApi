@@ -64,6 +64,34 @@ Rollback: a migration recusa reversão se houver cortesias ou pedidos sem e-mail
 Não remove pedidos nem inventa dados para restaurar o esquema antigo; planeje a
 preservação desses registros antes de reverter.
 
+### GET /orders/courtesy?limit=20&offset=0
+
+Exclusivo de **admin**. Lista cortesias de todos os administradores, das mais
+recentes às mais antigas, com paginação. `limit` padrão 20 (de 1 a 100);
+`offset` padrão 0, inteiro não negativo.
+
+Retorna `{ success: true, orders: [{ id, customerName, itemCount, createdAt,
+downloadExpiresAt, downloadUrl }], total, limit, offset }`. `total` é a quantidade
+total de cortesias, não apenas o tamanho da página. Não retorna e-mail nem dados
+de pagamento. Cortesias expiradas continuam disponíveis para consulta e remoção.
+
+### DELETE /orders/courtesy/:orderId
+
+Exclusivo de **admin**, com ID UUID válido. Remove permanentemente apenas um
+pedido com status `courtesy`. Seus itens são removidos atomicamente pelo
+`ON DELETE CASCADE` já existente, sem excluir fotos/vídeos ou objetos do S3,
+mesmo que os mesmos arquivos pertençam a outro pedido.
+
+Retorna HTTP 200 com `{ success: true, message }`. A partir da remoção, consultas
+ao portal e novas solicitações de download por aquele token retornam 404.
+Pedidos pagos ou de outros status não podem ser excluídos por esta rota.
+IDs inválidos retornam 400, pedidos cortesia inexistentes retornam 404 e falhas
+de persistência retornam 500 sem sucesso aparente.
+
+Arquivos já baixados não podem ser recolhidos; URLs S3 previamente assinadas
+continuam válidas até o vencimento original (até 1 hora). Nenhuma nova migration
+é necessária para listagem e remoção.
+
 ## Agenda
 
 Execute `npm run migrate` para aplicar `20261113000002-create-agenda-entries`

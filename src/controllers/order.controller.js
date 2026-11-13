@@ -5,6 +5,57 @@ const logger = require('../utils/logger');
 const crypto = require('crypto');
 const { quoteVideos } = require('../services/video-pricing.service');
 
+exports.listCourtesyOrders = async (req, res) => {
+    try {
+        const limit = Number(req.query.limit || 20);
+        const offset = Number(req.query.offset || 0);
+        const { count, rows } = await Order.findAndCountAll({
+            where: { status: 'courtesy' },
+            attributes: ['id', 'customerName', 'createdAt', 'downloadExpiresAt', 'downloadToken'],
+            include: [{ model: OrderItem, as: 'items', attributes: ['id'] }],
+            distinct: true,
+            limit,
+            offset,
+            order: [['createdAt', 'DESC'], ['id', 'DESC']]
+        });
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        return res.json({
+            success: true,
+            orders: rows.map(order => ({
+                id: order.id,
+                customerName: order.customerName,
+                itemCount: order.items.length,
+                createdAt: order.createdAt,
+                downloadExpiresAt: order.downloadExpiresAt,
+                downloadUrl: order.downloadToken ? `${frontendUrl}/downloads/${order.downloadToken}` : null
+            })),
+            total: count,
+            limit,
+            offset
+        });
+    } catch (error) {
+        logger.error('Erro ao listar cortesias', { error: error.message });
+        return res.status(500).json({ error: 'Erro ao listar cortesias' });
+    }
+};
+
+exports.deleteCourtesyOrder = async (req, res) => {
+    try {
+        // The order_items FK cascades in the same statement; original media is never deleted.
+        const deleted = await Order.destroy({
+            where: { id: req.params.orderId, status: 'courtesy' }
+        });
+        if (!deleted) {
+            return res.status(404).json({ error: 'Pedido cortesia não encontrado' });
+        }
+        logger.info('Pedido cortesia removido', { orderId: req.params.orderId, removedBy: req.userId });
+        return res.json({ success: true, message: 'Cortesia removida. O link de download foi desativado.' });
+    } catch (error) {
+        logger.error('Erro ao remover cortesia', { error: error.message, orderId: req.params.orderId });
+        return res.status(500).json({ error: 'Erro ao remover cortesia' });
+    }
+};
+
 exports.createCourtesyOrder = async (req, res) => {
     const { customerName, customerEmail, items } = req.body;
     if (typeof customerName !== 'string' || !customerName.trim() || customerName.trim().length > 255) {

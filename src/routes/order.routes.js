@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/order.controller');
 const { authenticate, authorize } = require('../middleware/auth');
-const { body } = require('express-validator');
+const { body, query, param } = require('express-validator');
 const validate = require('../middleware/validate');
 
 /**
@@ -11,6 +11,15 @@ const validate = require('../middleware/validate');
 
 // Create new order
 router.post('/', orderController.createOrder);
+
+router.get('/courtesy', authenticate, authorize('admin'), [
+    query('limit').optional().isString().bail().isInt({ min: 1, max: 100 }).withMessage('Limite deve ser de 1 a 100'),
+    query('offset').optional().isString().bail().isInt({ min: 0, max: Number.MAX_SAFE_INTEGER }).withMessage('Deslocamento inválido')
+], validate, orderController.listCourtesyOrders);
+
+router.delete('/courtesy/:orderId', authenticate, authorize('admin'), [
+    param('orderId').isUUID().withMessage('Identificador de cortesia inválido')
+], validate, orderController.deleteCourtesyOrder);
 
 router.post('/courtesy', authenticate, authorize('admin'), [
     body('customerEmail').optional({ nullable: true }).isString().bail()

@@ -1,9 +1,9 @@
 'use strict';
 
 jest.mock('../../src/models', () => ({
-    Order: { create: jest.fn(), findByPk: jest.fn(), findOne: jest.fn() },
+    Order: { create: jest.fn(), findByPk: jest.fn(), findOne: jest.fn(), findAndCountAll: jest.fn(), destroy: jest.fn() },
     OrderItem: { bulkCreate: jest.fn(), create: jest.fn() },
-    Photo: { findAll: jest.fn() },
+    Photo: { findAll: jest.fn(), destroy: jest.fn() },
     Event: {},
     User: { findByPk: jest.fn() },
     sequelize: { transaction: jest.fn() }
@@ -71,6 +71,8 @@ beforeEach(() => {
     Photo.findAll.mockResolvedValue([media()]);
     Order.findByPk.mockResolvedValue(null);
     Order.findOne.mockResolvedValue(null);
+    Order.findAndCountAll.mockResolvedValue({ count: 0, rows: [] });
+    Order.destroy.mockResolvedValue(0);
 });
 
 test.each([null, 'fotografo', 'organizador'])('rejects courtesy creation for role %s', async role => {
@@ -302,4 +304,95 @@ test('administrative token generation accepts courtesy without resetting its exp
     expect(response.body.downloadToken).toMatch(/^[a-f0-9]{64}$/);
     expect(response.body.expiresAt).toBe(expiresAt.toISOString());
     expect(save).toHaveBeenCalled();
+});
+
+test.each([null, 'fotografo', 'organizador'])('courtesy management rejects role %s', async role => {
+    for (const [method, path] of [['get', '/orders/courtesy'], ['delete', `/orders/courtesy/${photoId}`]]) {
+        let req = request(app)[method](path);
+        if (role) req = req.auth(token(role), { type: 'bearer' });
+        expect((await req).status).toBe(role ? 403 : 401);
+    }
+    expect(Order.findAndCountAll).not.toHaveBeenCalled();
+    expect(Order.destroy).not.toHaveBeenCalled();
+});
+
+test('lists all courtesy creators with real pagination totals, file counts and links but no private payment data', async () => {
+    Order.findAndCountAll.mockResolvedValue({
+        count: 23,
+        rows: [{
+            id: photoId, customerName: 'Pessoa', createdBy: 'another-admin',
+            customerEmail: 'private@example.com', paymentId: 'private-payment',
+            createdAt: '2026-11-13T10:00:00Z', downloadExpiresAt: '2027-02-11T10:00:00Z',
+            downloadToken: 'random-token', items: [{ id: 'item-1' }, { id: 'item-2' }]
+        }]
+    });
+    const response = await request(app).get('/orders/courtesy')
+        .query({ limit: 2, offset: 20, status: 'paid', createdBy: 'attacker' })
+        .auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(200);
+    expect(Order.findAndCountAll).toHaveBeenCalledWith(expect.objectContaining({
+        where: { status: 'courtesy' }, limit: 2, offset: 20, distinct: true,
+        order: [['createdAt', 'DESC'], ['id', 'DESC']]
+    }));
+    expect(response.body).toMatchObject({ success: true, total: 23, limit: 2, offset: 20 });
+    expect(response.body.orders).toEqual([{
+        id: photoId, customerName: 'Pessoa', itemCount: 2, createdAt: '2026-11-13T10:00:00Z',
+        downloadExpiresAt: '2027-02-11T10:00:00Z', downloadUrl: expect.stringMatching(/\/downloads\/random-token$/)
+    }]);
+    expect(Order.findByPk).not.toHaveBeenCalled();
+});
+
+test('empty courtesy list uses a bounded default page', async () => {
+    const response = await request(app).get('/orders/courtesy').auth(token(), { type: 'bearer' });
+    expect(response.body).toEqual({ success: true, orders: [], total: 0, limit: 20, offset: 0 });
+    expect(Order.findAndCountAll.mock.calls[0][0]).toMatchObject({ limit: 20, offset: 0 });
+});
+
+test.each([
+    { limit: 0 }, { limit: 101 }, { limit: 'bad' }, { limit: [1, 2] },
+    { offset: -1 }, { offset: 'bad' }, { offset: '999999999999999999999999' }
+])('rejects invalid courtesy pagination %j', async query => {
+    const response = await request(app).get('/orders/courtesy').query(query).auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(400);
+    expect(Order.findAndCountAll).not.toHaveBeenCalled();
+});
+
+test('removing a courtesy disables its portal and download without deleting originals', async () => {
+    let deleted = false;
+    Order.findOne.mockImplementation(async () => deleted ? null : { status: 'courtesy', items: [] });
+    Order.destroy.mockImplementation(async options => {
+        expect(options.where).toEqual({ id: photoId, status: 'courtesy' });
+        deleted = true;
+        return 1;
+    });
+    expect((await request(app).get('/downloads/random-token')).status).toBe(200);
+    const response = await request(app).delete(`/orders/courtesy/${photoId}`).auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect((await request(app).get('/downloads/random-token')).status).toBe(404);
+    expect((await request(app).get(`/downloads/random-token/photo/${videoId}`)).status).toBe(404);
+    expect(Photo.destroy).not.toHaveBeenCalled();
+    expect(storage.generatePresignedUrl).not.toHaveBeenCalled();
+});
+
+test('missing or non-courtesy orders cannot be removed through courtesy management', async () => {
+    const response = await request(app).delete(`/orders/courtesy/${photoId}`).auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(404);
+    expect(Order.destroy).toHaveBeenCalledWith({ where: { id: photoId, status: 'courtesy' } });
+});
+
+test('rejects malformed deletion IDs before reaching persistence', async () => {
+    const response = await request(app).delete('/orders/courtesy/bad-id').auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(400);
+    expect(Order.destroy).not.toHaveBeenCalled();
+});
+
+test('list and deletion failures are explicit and logged', async () => {
+    Order.findAndCountAll.mockRejectedValueOnce(new Error('database unavailable'));
+    expect((await request(app).get('/orders/courtesy').auth(token(), { type: 'bearer' })).status).toBe(500);
+    Order.destroy.mockRejectedValueOnce(new Error('delete failed'));
+    const response = await request(app).delete(`/orders/courtesy/${photoId}`).auth(token(), { type: 'bearer' });
+    expect(response.status).toBe(500);
+    expect(response.body.success).toBeUndefined();
+    expect(logger.error).toHaveBeenCalledTimes(2);
 });
