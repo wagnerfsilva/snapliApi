@@ -120,6 +120,10 @@ module.exports = (sequelize, DataTypes) => {
                 fields: ['eventId']
             },
             {
+                name: 'photos_original_key',
+                fields: ['originalKey']
+            },
+            {
                 fields: ['processingStatus']
             },
             {

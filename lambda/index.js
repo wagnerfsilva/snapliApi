@@ -183,19 +183,42 @@ async function sendCallback(payload) {
         return;
     }
 
-    const response = await fetch(API_CALLBACK_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-lambda-secret': LAMBDA_INTERNAL_SECRET
-        },
-        body: JSON.stringify(payload)
-    });
+    const maxAttempts = 5;
+    let lastError;
 
-    if (!response.ok) {
-        const body = await response.text();
-        throw new Error(`Callback failed: ${response.status} ${body}`);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        let retryable = true;
+        try {
+            const response = await fetch(API_CALLBACK_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-lambda-secret': LAMBDA_INTERNAL_SECRET
+                },
+                body: JSON.stringify(payload),
+                signal: AbortSignal.timeout(20000)
+            });
+
+            if (response.ok) {
+                console.log(`Callback sent for ${payload.originalKey} → ${response.status}`);
+                return;
+            }
+
+            const body = await response.text();
+            // 4xx (except 429) won't succeed on retry
+            retryable = response.status >= 500 || response.status === 429;
+            lastError = new Error(`Callback failed: ${response.status} ${body}`);
+        } catch (error) {
+            lastError = error;
+        }
+
+        if (!retryable || attempt === maxAttempts) break;
+
+        // Exponential backoff with jitter so a batch of Lambdas doesn't retry in lockstep
+        const delay = Math.min(2000 * 2 ** (attempt - 1), 30000) + Math.random() * 1000;
+        console.warn(`Callback attempt ${attempt} failed (${lastError.message}); retrying in ${Math.round(delay)}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
     }
 
-    console.log(`Callback sent for ${payload.originalKey} → ${response.status}`);
+    throw lastError;
 }

@@ -45,13 +45,15 @@ module.exports = {
                 rejectUnauthorized
             },
             family: 4,
-            prepare: false
+            prepare: false,
+            // Fail fast instead of hanging when the database is saturated
+            connectionTimeoutMillis: 10000
         },
         logging: false,
         pool: {
             max: 10,
-            min: 2,
-            acquire: 30000,
+            min: 0,
+            acquire: 15000,
             idle: 10000
         }
     }
