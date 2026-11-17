@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "migrate": "sequelize-cli db:migrate",
     "migrate:undo": "sequelize-cli db:migrate:undo",
+    "archive:event": "NODE_ENV=production DB_SSL_REJECT_UNAUTHORIZED=false node scripts/archive/archive-event.js",
     "seed": "sequelize-cli db:seed:all",
     "test": "jest --coverage",
     "lint": "eslint src/**/*.js",

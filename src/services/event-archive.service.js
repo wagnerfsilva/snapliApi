@@ -70,6 +70,32 @@ async function getArchiveBlockers(event, now = new Date()) {
     return blockers;
 }
 
+/**
+ * Read-only snapshot used by the CLI to show the admin what is about to be archived.
+ */
+async function getEventOverview(eventId, now = new Date()) {
+    const event = await Event.findByPk(eventId);
+    if (!event) throw new Error('Evento não encontrado');
+
+    const orders = await loadEventOrders(event.id);
+    const paid = orders.filter(order => PAID_STATUSES.includes(order.status));
+    const lastExpiry = paid.reduce((latest, order) => {
+        const expiresAt = effectiveDownloadExpiry(order);
+        return !latest || expiresAt > latest ? expiresAt : latest;
+    }, null);
+
+    return {
+        event,
+        orders: {
+            paid: paid.filter(order => order.status !== 'courtesy').length,
+            courtesy: paid.filter(order => order.status === 'courtesy').length,
+            unpaid: orders.length - paid.length,
+            lastDownloadExpiry: lastExpiry
+        },
+        blockers: await getArchiveBlockers(event, now)
+    };
+}
+
 async function collectMedia(eventId) {
     const photos = await sequelize.query(
         `SELECT "originalKey", "watermarkedKey", "thumbnailKey", "previewKey", "rekognitionFaceId"
@@ -152,5 +178,6 @@ module.exports = {
     DEFAULT_DOWNLOAD_DAYS,
     effectiveDownloadExpiry,
     getArchiveBlockers,
+    getEventOverview,
     archiveEvent
 };
