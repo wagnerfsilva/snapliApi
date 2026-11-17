@@ -7,7 +7,7 @@ jest.mock('../../src/models', () => ({
     Photo: { findAll: jest.fn() },
     Event: { create: jest.fn(), findByPk: jest.fn() },
     User: { findByPk: jest.fn() },
-    Order: { create: jest.fn(), findByPk: jest.fn() },
+    Order: { create: jest.fn(), findByPk: jest.fn(), findOne: jest.fn() },
     OrderItem: { create: jest.fn() }
 }));
 jest.mock('../../src/services/pix.service', () => ({ createPixPayment: jest.fn() }));
@@ -123,6 +123,7 @@ describe('mixed order pricing', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         Order.create.mockResolvedValue({ id: 'order', update: jest.fn() });
+        Order.findOne.mockResolvedValue(null);
         Order.findByPk.mockResolvedValue({ id: 'order', items: [] });
         OrderItem.create.mockImplementation(async item => item);
         pixService.createPixPayment.mockResolvedValue({ id: 'payment' });

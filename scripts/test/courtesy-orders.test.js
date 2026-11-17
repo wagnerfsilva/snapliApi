@@ -1,5 +1,7 @@
 'use strict';
 
+const { spawnSync } = require('node:child_process');
+
 jest.mock('../../src/models', () => ({
     Order: { create: jest.fn(), findByPk: jest.fn(), findOne: jest.fn(), findAll: jest.fn(), findAndCountAll: jest.fn(), destroy: jest.fn() },
     OrderItem: { bulkCreate: jest.fn(), create: jest.fn() },
@@ -25,7 +27,7 @@ jest.mock('../../src/config/jwt', () => ({
 const express = require('express');
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
-const { Op } = require('sequelize');
+const { Sequelize, DataTypes, Op, fn, col, where } = require('sequelize');
 const jwtConfig = require('../../src/config/jwt');
 const { Order, OrderItem, Photo, User, sequelize } = require('../../src/models');
 const pix = require('../../src/services/pix.service');
@@ -295,6 +297,134 @@ test('public checkout ignores forged courtesy and pricing fields and still creat
     expect(Order.create.mock.calls[0][0]).toMatchObject({ status: 'pending', totalAmount: 15 });
     expect(pix.createPixPayment).toHaveBeenCalledWith(expect.objectContaining({ amount: 15 }));
     expect(response.body.order).toMatchObject({ status: 'pending', totalAmount: 15, paymentId: 'payment-id' });
+});
+
+test('checkout checks normalized email and overlapping files only in paid purchases from the last seven days', async () => {
+    Order.findOne.mockResolvedValue({ id: 'previous-order', downloadToken: 'private-token' });
+    const before = Date.now();
+    const response = await request(app).post('/orders').send({
+        customerName: 'Pessoa', customerEmail: ' PERSON@Example.com ', items: [{ photoId }]
+    });
+    const after = Date.now();
+    const options = Order.findOne.mock.calls[0][0];
+    expect(options.where[Op.and]).toEqual([
+        where(fn('lower', fn('trim', col('Order.customerEmail'))), 'person@example.com')
+    ]);
+    expect(options.where.status[Op.in]).toEqual(['paid', 'completed']);
+    const [since, until] = options.where.paidAt[Op.between];
+    expect(until.getTime()).toBeGreaterThanOrEqual(before);
+    expect(until.getTime()).toBeLessThanOrEqual(after);
+    expect(until.getTime() - since.getTime()).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(options).toMatchObject({
+        attributes: ['id'], subQuery: false,
+        include: [{ model: OrderItem, as: 'items', attributes: [], required: true, where: { photoId: { [Op.in]: [photoId] } } }]
+    });
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({
+        code: 'RECENT_PURCHASE_OVERLAP',
+        error: 'Você já possui uma compra paga com arquivos deste carrinho nos últimos 7 dias. Uma nova cobrança não será gerada.'
+    });
+    expect(JSON.stringify(response.body)).not.toContain('previous-order');
+    expect(JSON.stringify(response.body)).not.toContain('private-token');
+    expect(Order.create).not.toHaveBeenCalled();
+    expect(OrderItem.create).not.toHaveBeenCalled();
+    expect(pix.createPixPayment).not.toHaveBeenCalled();
+});
+
+test('adding new files does not bypass the recent purchase check for an already purchased file', async () => {
+    Photo.findAll.mockResolvedValue([media(), media(videoId, 'video')]);
+    Order.findOne.mockResolvedValue({ id: 'previous-order' });
+    const response = await request(app).post('/orders').send({
+        customerName: 'Pessoa', customerEmail: 'person@example.com',
+        items: [{ photoId: videoId }, { photoId }]
+    });
+    expect(response.status).toBe(409);
+    expect(Order.findOne.mock.calls[0][0].include[0].where.photoId[Op.in]).toEqual([videoId, photoId]);
+    expect(Order.create).not.toHaveBeenCalled();
+    expect(pix.createPixPayment).not.toHaveBeenCalled();
+});
+
+test('checkout fails explicitly without creating an order or PIX when the recent purchase lookup fails', async () => {
+    Order.findOne.mockRejectedValueOnce(new Error('database unavailable'));
+    const response = await request(app).post('/orders').send({
+        customerName: 'Pessoa', customerEmail: 'person@example.com', items: [{ photoId }]
+    });
+    expect(response.status).toBe(500);
+    expect(logger.error).toHaveBeenCalled();
+    expect(Order.create).not.toHaveBeenCalled();
+    expect(pix.createPixPayment).not.toHaveBeenCalled();
+});
+
+describe('recent purchase matching against the generated SQL', () => {
+    const lookupDb = new Sequelize('postgres://test:test@localhost/test', { logging: false });
+    const LookupOrder = lookupDb.define('Order', {
+        id: { type: DataTypes.STRING, primaryKey: true },
+        customerEmail: DataTypes.STRING,
+        status: DataTypes.STRING,
+        paidAt: DataTypes.DATE
+    }, { tableName: 'orders', timestamps: false });
+    const LookupItem = lookupDb.define('OrderItem', {
+        id: { type: DataTypes.STRING, primaryKey: true },
+        orderId: DataTypes.STRING,
+        photoId: DataTypes.STRING
+    }, { tableName: 'order_items', timestamps: false });
+    LookupOrder.hasMany(LookupItem, { as: 'items', foreignKey: 'orderId' });
+    const day = 24 * 60 * 60 * 1000;
+
+    test.each([
+        ['paid', day, ' PERSON@Example.com ', photoId, 409],
+        ['completed', day, 'person@example.com', photoId, 409],
+        ['paid', 7 * day, 'person@example.com', photoId, 409],
+        ['paid', 7 * day + 1, 'person@example.com', photoId, 201],
+        ['paid', -1, 'person@example.com', photoId, 201],
+        ['paid', null, 'person@example.com', photoId, 201],
+        ['pending', day, 'person@example.com', photoId, 201],
+        ['processing', day, 'person@example.com', photoId, 201],
+        ['refunded', day, 'person@example.com', photoId, 201],
+        ['cancelled', day, 'person@example.com', photoId, 201],
+        ['courtesy', day, 'person@example.com', photoId, 201],
+        ['paid', day, 'other@example.com', photoId, 201],
+        ['paid', day, 'person@example.com', videoId, 201]
+    ])('previous %s purchase, age %s, email %s and file %s returns %s', async (status, age, email, previousPhotoId, expectedStatus) => {
+        Photo.findAll.mockResolvedValue([{
+            ...media(), eventId: 'event', event: { id: 'event', name: 'Evento', pricePerPhoto: 15, isActive: true }
+        }]);
+        Order.create.mockImplementation(async data => ({ id: 'order-id', ...data, update: jest.fn() }));
+        OrderItem.create.mockResolvedValue({});
+        Order.findByPk.mockResolvedValue({ items: [{}] });
+        pix.createPixPayment.mockResolvedValue({ id: 'payment-id' });
+        Order.findOne.mockImplementation(async options => {
+            const now = options.where.paidAt[Op.between][1].getTime();
+            const paidAt = age === null ? null : new Date(now - age);
+            lookupDb.query = async (sql, queryOptions) => {
+                const fixture = `
+                    CREATE TABLE orders (id TEXT, "customerEmail" TEXT, status TEXT, "paidAt" TEXT);
+                    CREATE TABLE order_items (id TEXT, "orderId" TEXT, "photoId" TEXT);
+                    INSERT INTO orders VALUES ('previous', ${lookupDb.escape(email)}, ${lookupDb.escape(status)}, ${lookupDb.escape(paidAt)});
+                    INSERT INTO order_items VALUES ('previous-item', 'previous', ${lookupDb.escape(previousPhotoId)});
+                `;
+                const result = spawnSync('sqlite3', ['-json', ':memory:', fixture + sql], { encoding: 'utf8' });
+                if (result.error) throw result.error;
+                if (result.status !== 0) throw new Error(result.stderr);
+                const rows = result.stdout.trim() ? JSON.parse(result.stdout) : [];
+                return rows.length ? queryOptions.model.build(rows[0], { isNewRecord: false }) : null;
+            };
+            return LookupOrder.findOne({
+                ...options, include: options.include.map(include => ({ ...include, model: LookupItem }))
+            });
+        });
+        const response = await request(app).post('/orders').send({
+            customerName: 'Pessoa', customerEmail: 'person@example.com', items: [{ photoId }]
+        });
+        expect(response.status).toBe(expectedStatus);
+        if (expectedStatus === 409) {
+            expect(Order.create).not.toHaveBeenCalled();
+            expect(pix.createPixPayment).not.toHaveBeenCalled();
+        } else {
+            expect(Order.create).toHaveBeenCalledTimes(1);
+            expect(pix.createPixPayment).toHaveBeenCalledTimes(1);
+        }
+    });
 });
 
 test('administrative token generation accepts courtesy without resetting its expiration', async () => {

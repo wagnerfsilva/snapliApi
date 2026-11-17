@@ -116,6 +116,10 @@ O script pede para digitar o nome do evento para confirmar. Requer migração `a
 - `POST /api/orders` - Criar pedido
 - `GET /api/orders/:token` - Detalhes do pedido
 
+O checkout bloqueia uma nova compra (`409`, código `RECENT_PURCHASE_OVERLAP`) quando o mesmo e-mail, ignorando espaços nas pontas e diferenças entre maiúsculas e minúsculas, já possui um pedido `paid` ou `completed` pago nos últimos 7 dias com pelo menos um dos mesmos arquivos. Como cada arquivo pertence a um evento, a comparação não bloqueia arquivos diferentes do mesmo evento nem compras de outros eventos. Adicionar arquivos novos ao carrinho não remove o bloqueio se ainda houver algum arquivo já comprado. O pedido inteiro é recusado antes de criar pedido, itens ou cobrança PIX; nenhum pedido ou pagamento anterior é alterado. O checkout exibe a mensagem retornada pela API.
+
+PIX pendentes, pedidos em processamento, estornados, cancelados e cortesias não bloqueiam. O intervalo é contado a partir de `paidAt`, inclusive no limite de 7 dias. Esta regra não implementa atualização de compras anteriores nem impede múltiplos PIX pendentes.
+
 ### Downloads
 - `GET /api/download/:token` - Portal de download
 - `POST /api/download/:token/download` - Download das fotos

@@ -4,7 +4,7 @@ const pixService = require('../services/pix.service');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 const { quoteVideos } = require('../services/video-pricing.service');
-const { Op } = require('sequelize');
+const { Op, fn, col, where } = require('sequelize');
 
 exports.listCourtesyOrders = async (req, res) => {
     try {
@@ -132,7 +132,7 @@ exports.createOrder = async (req, res) => {
         const { customerName, customerEmail, items } = req.body;
 
         // Validations
-        if (!customerName || !customerEmail || !Array.isArray(items) || items.length === 0) {
+        if (!customerName || typeof customerEmail !== 'string' || !customerEmail.trim() || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
                 error: 'Nome, email e itens são obrigatórios'
             });
@@ -162,6 +162,36 @@ exports.createOrder = async (req, res) => {
             if (photo.mediaType === 'video' && (photo.processingStatus !== 'completed' || !photo.previewKey || !photo.event?.isActive)) {
                 return res.status(400).json({ error: 'Video indisponivel para compra' });
             }
+        }
+
+        const now = new Date();
+        const recentPurchase = await Order.findOne({
+            attributes: ['id'],
+            where: {
+                [Op.and]: [
+                    where(fn('lower', fn('trim', col('Order.customerEmail'))), customerEmail.trim().toLowerCase())
+                ],
+                status: { [Op.in]: ['paid', 'completed'] },
+                paidAt: { [Op.between]: [new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), now] }
+            },
+            include: [{
+                model: OrderItem,
+                as: 'items',
+                attributes: [],
+                required: true,
+                where: { photoId: { [Op.in]: photoIds } }
+            }],
+            subQuery: false
+        });
+
+        if (recentPurchase) {
+            logger.info('Nova compra bloqueada por arquivos ja adquiridos nos ultimos 7 dias', {
+                previousOrderId: recentPurchase.id
+            });
+            return res.status(409).json({
+                code: 'RECENT_PURCHASE_OVERLAP',
+                error: 'Você já possui uma compra paga com arquivos deste carrinho nos últimos 7 dias. Uma nova cobrança não será gerada.'
+            });
         }
 
         // Group photos by event, preservando a ordem original de `items` (define quais fotos ficam grátis)
