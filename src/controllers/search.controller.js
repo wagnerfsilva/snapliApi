@@ -271,7 +271,8 @@ class SearchController {
                      WHERE "processingStatus" = 'completed'`,
                     { type: QueryTypes.SELECT }
                 ),
-                Event.count({ where: { isActive: true } }),
+                // Archived events are deactivated but still count as regular events
+                Event.count({ where: { [Op.or]: [{ isActive: true }, { archivedAt: { [Op.ne]: null } }] } }),
                 OrderItem.count({
                     include: [{
                         model: Order,

@@ -33,6 +33,13 @@ class PhotoController {
                 });
             }
 
+            if (event.archivedAt) {
+                return res.status(409).json({
+                    success: false,
+                    message: 'Evento arquivado não aceita novos uploads'
+                });
+            }
+
             const uploadResults = [];
             const errors = [];
 
@@ -121,6 +128,19 @@ class PhotoController {
             const where = { eventId };
             if (processingStatus) {
                 where.processingStatus = processingStatus;
+            }
+
+            // Media was removed from S3 when the event was archived
+            const archivedEvent = await Event.findOne({ where: { id: eventId, archivedAt: { [Op.ne]: null } }, attributes: ['id'] });
+            if (archivedEvent) {
+                return res.json({
+                    success: true,
+                    data: {
+                        photos: [],
+                        archived: true,
+                        pagination: { total: 0, page: safePage, limit: safeLimit, totalPages: 0 }
+                    }
+                });
             }
 
             const { count, rows: photos } = await Photo.findAndCountAll({
@@ -352,12 +372,24 @@ class PhotoController {
                 });
             }
 
+            if (event.archivedAt) {
+                return res.json({
+                    success: true,
+                    data: {
+                        event: { id: event.id, name: event.name, date: event.date, location: event.location, archivedAt: event.archivedAt },
+                        photos: [],
+                        pagination: { total: 0, page: safePage, limit: safeLimit, totalPages: 0 }
+                    }
+                });
+            }
+
             if (!event.isActive && req.userRole !== 'admin') {
                 return res.status(403).json({
                     success: false,
                     message: 'Evento não está ativo'
                 });
             }
+
 
             const { count, rows: photos } = await Photo.findAndCountAll({
                 where: {

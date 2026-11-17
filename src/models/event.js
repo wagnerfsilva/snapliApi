@@ -117,6 +117,12 @@ module.exports = (sequelize, DataTypes) => {
                 max: 100
             },
             comment: 'Percentual de comissão do organizador sobre o valor bruto vendido do evento'
+        },
+        archivedAt: {
+            type: DataTypes.DATE,
+            allowNull: true,
+            defaultValue: null,
+            comment: 'Preenchido pelo script de arquivamento após remover as mídias do S3; irreversível'
         }
     }, {
         tableName: 'events',

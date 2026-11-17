@@ -2,6 +2,8 @@ const {
     PutObjectCommand,
     GetObjectCommand,
     DeleteObjectCommand,
+    DeleteObjectsCommand,
+    ListObjectsV2Command,
     HeadObjectCommand
 } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
@@ -187,6 +189,56 @@ class S3Service {
             logger.error('Erro ao deletar arquivo do S3:', error);
             throw new Error(`Erro ao deletar arquivo: ${error.message}`);
         }
+    }
+
+    /**
+     * List every object key under a prefix
+     */
+    async listKeysByPrefix(prefix, bucket = 'original') {
+        this._checkAwsConfigured();
+
+        const bucketName = bucket === 'original' ? buckets.original : buckets.watermarked;
+        const keys = [];
+        let continuationToken;
+
+        do {
+            const response = await s3Client.send(new ListObjectsV2Command({
+                Bucket: bucketName,
+                Prefix: prefix,
+                ContinuationToken: continuationToken
+            }));
+            for (const item of response.Contents || []) keys.push(item.Key);
+            continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+        } while (continuationToken);
+
+        return keys;
+    }
+
+    /**
+     * Delete many objects (batches of 1000). Throws if any object fails to delete.
+     */
+    async deleteFiles(keys, bucket = 'original') {
+        this._checkAwsConfigured();
+
+        const bucketName = bucket === 'original' ? buckets.original : buckets.watermarked;
+        const uniqueKeys = [...new Set(keys.filter(Boolean))];
+        let deleted = 0;
+
+        for (let offset = 0; offset < uniqueKeys.length; offset += 1000) {
+            const batch = uniqueKeys.slice(offset, offset + 1000);
+            const response = await s3Client.send(new DeleteObjectsCommand({
+                Bucket: bucketName,
+                Delete: { Objects: batch.map(Key => ({ Key })), Quiet: true }
+            }));
+            if (response.Errors?.length) {
+                const first = response.Errors[0];
+                throw new Error(`Falha ao deletar ${response.Errors.length} objeto(s) em ${bucketName} (ex: ${first.Key}: ${first.Message})`);
+            }
+            deleted += batch.length;
+        }
+
+        logger.info(`${deleted} objeto(s) deletado(s) do S3: ${bucketName}`);
+        return deleted;
     }
 
     /**

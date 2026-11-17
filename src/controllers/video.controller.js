@@ -34,6 +34,7 @@ exports.start = async (req, res, next) => {
         const event = await Event.findByPk(req.body.eventId);
         if (!event) return res.status(404).json({ success: false, message: 'Evento nao encontrado' });
         if (!allowed(req, event)) return res.status(403).json({ success: false, message: 'Acesso negado ao evento' });
+        if (event.archivedAt) return res.status(409).json({ success: false, message: 'Evento arquivado nao aceita novos uploads' });
         if (!event.isActive || !event.videoEnabled) return res.status(400).json({ success: false, message: 'Habilite videos e configure seus precos no evento' });
         if (!require('../services/video-lambda.service').isReady()) {
             return res.status(503).json({ success: false, message: 'Processador de video ainda nao esta disponivel' });

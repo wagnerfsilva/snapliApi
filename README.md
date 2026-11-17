@@ -92,6 +92,18 @@ npm start
 - `PUT /api/events/:id` - Atualizar evento (admin)
 - `DELETE /api/events/:id` - Deletar evento (admin)
 
+`GET /api/events` oculta eventos arquivados por padrão; use `?includeArchived=true` para listá-los.
+
+### Arquivamento de evento (script local, somente admin)
+
+```bash
+node scripts/archive/archive-event.js --event-id <uuid> --dry-run   # só valida e mostra o resumo
+node scripts/archive/archive-event.js --event-id <uuid>             # pede confirmação
+node scripts/archive/archive-event.js --event-id <uuid> --yes       # sem confirmação
+```
+
+Requer migração `archivedAt` aplicada e acesso ao banco/AWS (`.env`). O evento só é arquivado se o prazo de download de todos os pedidos pagos/cortesia já expirou (sem `downloadExpiresAt`: `paidAt`/`createdAt` + 90 dias) e não há pedido `pending`/`processing` criado há menos de 10 dias. O script remove do S3 todas as fotos, thumbs, previews e vídeos (e as faces do Rekognition), desativa o evento e grava `archivedAt`. Os registros do banco são mantidos, então métricas, dashboard e relatórios continuam contando o evento. É irreversível e pode ser re-executado após falha parcial.
+
 ### Fotos
 - `POST /api/photos/upload` - Upload de fotos (admin)
 - `GET /api/photos/event/:eventId` - Fotos do evento

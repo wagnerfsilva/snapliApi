@@ -105,6 +105,7 @@ class EventController {
                 limit = 20,
                 search = '',
                 isActive,
+                includeArchived,
                 startDate,
                 endDate,
                 sortBy = 'date',
@@ -128,6 +129,11 @@ class EventController {
 
             if (isActive !== undefined) {
                 where.isActive = isActive === 'true';
+            }
+
+            // Archived events are hidden unless explicitly requested
+            if (includeArchived !== 'true') {
+                where.archivedAt = null;
             }
 
             if (startDate || endDate) {
@@ -341,6 +347,9 @@ class EventController {
 
             if (req.userRole === 'fotografo' && event.createdBy !== req.userId) {
                 return res.status(403).json({ success: false, message: 'Acesso negado a este evento' });
+            }
+            if (event.archivedAt && (isActive === true || isActive === 'true')) {
+                return res.status(409).json({ success: false, message: 'Evento arquivado não pode ser reativado' });
             }
             try {
                 Object.assign(updateData, videoPricingFields(req.body, event));
