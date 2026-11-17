@@ -56,7 +56,11 @@ async function getEventSalesSummary(eventId) {
 async function getOrganizerEventBalance(event) {
     const salesSummary = await getEventSalesSummary(event.id);
     const commissionPercentage = parseFloat(event.organizerCommissionPercentage) || 0;
-    const commissionTotal = salesSummary.totalRevenue * (commissionPercentage / 100);
+    const commissionInCents = salesSummary.totalRevenue * commissionPercentage;
+    // Compensate for binary precision at half-cent rounding boundaries.
+    const commissionTotalCents = Math.round(
+        commissionInCents + Number.EPSILON * Math.max(1, Math.abs(commissionInCents))
+    );
 
     const [row] = await sequelize.query(
         `
@@ -71,15 +75,15 @@ async function getOrganizerEventBalance(event) {
         }
     );
 
-    const reservedOrPaidTotal = parseFloat(row.reservedOrPaidTotal) || 0;
-    const availableBalance = Math.max(commissionTotal - reservedOrPaidTotal, 0);
+    const reservedOrPaidTotalCents = Math.round((parseFloat(row.reservedOrPaidTotal) || 0) * 100);
+    const availableBalanceCents = Math.max(commissionTotalCents - reservedOrPaidTotalCents, 0);
 
     return {
         ...salesSummary,
         commissionPercentage,
-        commissionTotal,
-        reservedOrPaidTotal,
-        availableBalance
+        commissionTotal: commissionTotalCents / 100,
+        reservedOrPaidTotal: reservedOrPaidTotalCents / 100,
+        availableBalance: availableBalanceCents / 100
     };
 }
 

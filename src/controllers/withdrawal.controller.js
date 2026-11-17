@@ -84,7 +84,7 @@ class WithdrawalController {
             const balance = await commissionService.getOrganizerEventBalance(event);
             const requestedAmount = parseFloat(amount);
 
-            if (requestedAmount > balance.availableBalance) {
+            if (Math.round(requestedAmount * 100) > Math.round(balance.availableBalance * 100)) {
                 return res.status(400).json({
                     success: false,
                     message: `Valor solicitado excede o saldo disponível (R$ ${balance.availableBalance.toFixed(2)})`

@@ -4,15 +4,17 @@ const { spawnSync } = require('node:child_process');
 
 jest.mock('../../src/models', () => ({
     sequelize: { query: jest.fn() },
-    Event: { findAndCountAll: jest.fn() },
+    Event: { findAndCountAll: jest.fn(), findByPk: jest.fn() },
     Photo: {},
-    User: {}
+    User: { findByPk: jest.fn() },
+    WithdrawalRequest: { create: jest.fn() }
 }));
-jest.mock('../../src/utils/logger', () => ({ error: jest.fn() }));
+jest.mock('../../src/utils/logger', () => ({ error: jest.fn(), info: jest.fn() }));
 
-const { sequelize, Event } = require('../../src/models');
+const { sequelize, Event, User, WithdrawalRequest } = require('../../src/models');
 const commissionService = require('../../src/services/commission.service');
 const eventController = require('../../src/controllers/event.controller');
+const withdrawalController = require('../../src/controllers/withdrawal.controller');
 
 const fixture = `
     CREATE TABLE orders (id TEXT, "totalAmount" REAL, status TEXT);
@@ -136,6 +138,71 @@ test('does not expose negative available balances after existing withdrawals', a
     const balance = await commissionService.getOrganizerEventBalance({ id: 'event-a', organizerCommissionPercentage: 10 });
     expect(balance.commissionTotal).toBe(3);
     expect(balance.availableBalance).toBe(0);
+});
+
+test.each([
+    ['1997.86', 30, 599.36],
+    ['1997.84', 30, 599.35],
+    ['1.15', 50, 0.58]
+])('rounds commission on revenue %s at %s percent to cents', async (revenue, percentage, expected) => {
+    sequelize.query
+        .mockResolvedValueOnce([{ totalOrders: '1', totalRevenue: revenue, totalPhotosSold: '1' }])
+        .mockResolvedValueOnce([{ reservedOrPaidTotal: '0' }]);
+
+    const balance = await commissionService.getOrganizerEventBalance({
+        id: 'event-a', organizerCommissionPercentage: percentage
+    });
+
+    expect(balance.commissionTotal).toBe(expected);
+    expect(balance.availableBalance).toBe(expected);
+});
+
+test('subtracts withdrawals in cents from the rounded commission without floating-point residue', async () => {
+    sequelize.query
+        .mockResolvedValueOnce([{ totalOrders: '1', totalRevenue: '1997.86', totalPhotosSold: '1' }])
+        .mockResolvedValueOnce([{ reservedOrPaidTotal: '590.17' }]);
+
+    const balance = await commissionService.getOrganizerEventBalance({
+        id: 'event-a', organizerCommissionPercentage: 30
+    });
+
+    expect(balance.commissionTotal).toBe(599.36);
+    expect(balance.reservedOrPaidTotal).toBe(590.17);
+    expect(balance.availableBalance).toBe(9.19);
+});
+
+test.each([
+    [599.36, 201],
+    [599.37, 400]
+])('responds with %s withdrawal using the rounded balance (HTTP %s)', async (amount, status) => {
+    Event.findByPk.mockResolvedValue({
+        id: 'event-a', organizerId: 'organizer-a', organizerCommissionPercentage: 30
+    });
+    User.findByPk.mockResolvedValue({ pixKey: 'test-pix-key' });
+    WithdrawalRequest.create.mockResolvedValue({ id: 'withdrawal-a', amount });
+    sequelize.query
+        .mockResolvedValueOnce([{ count: '0' }])
+        .mockResolvedValueOnce([{ totalOrders: '1', totalRevenue: '1997.86', totalPhotosSold: '1' }])
+        .mockResolvedValueOnce([{ reservedOrPaidTotal: '0' }]);
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+
+    await withdrawalController.create({
+        body: { eventId: 'event-a', amount }, userId: 'organizer-a'
+    }, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(status);
+    if (status === 201) {
+        expect(WithdrawalRequest.create).toHaveBeenCalledWith(expect.objectContaining({ amount }));
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    } else {
+        expect(WithdrawalRequest.create).not.toHaveBeenCalled();
+        expect(res.json).toHaveBeenCalledWith({
+            success: false,
+            message: 'Valor solicitado excede o saldo disponível (R$ 599.36)'
+        });
+    }
 });
 
 test('courtesy does not add sales, sold files, revenue, commission or withdrawal balance', async () => {

@@ -120,6 +120,10 @@ O script pede para digitar o nome do evento para confirmar. Requer migração `a
 - `GET /api/download/:token` - Portal de download
 - `POST /api/download/:token/download` - Download das fotos
 
+### Resgate de comissão
+
+A comissão total do evento é arredondada para o centavo mais próximo antes de descontar os resgates pendentes, aprovados ou pagos. Por exemplo, R$ 599,358 passa a R$ 599,36. O saldo e a validação do resgate são calculados em centavos para permitir solicitar o valor integral exibido, sem diferenças de precisão.
+
 ## 🧪 Scripts Disponíveis
 
 ```bash
