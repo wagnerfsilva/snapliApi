@@ -1,10 +1,9 @@
 require('dotenv').config();
 const readline = require('node:readline/promises');
 const { sequelize } = require('../../src/models');
-const { archiveEvent, getEventOverview, listArchiveCandidates, UNPAID_GRACE_DAYS } = require('../../src/services/event-archive.service');
+const { archiveEvent, getEventOverview, UNPAID_GRACE_DAYS } = require('../../src/services/event-archive.service');
 
-// Uso: node scripts/archive/archive-event.js [event-id] [--dry-run] [--yes]
-// Sem event-id, lista os eventos e deixa escolher pelo número.
+// Uso: node scripts/archive/archive-event.js <event-id> [--dry-run] [--yes]
 // Mostra os dados do evento, informa se ele pode ser arquivado e pede confirmação.
 // Remove do S3 todas as fotos/thumbs/previews/vídeos do evento e as faces do Rekognition.
 // Os registros do banco (fotos, pedidos) são mantidos para que métricas e relatórios não mudem.
@@ -58,32 +57,13 @@ async function confirm(event, summary) {
     return answer.trim() === event.name.trim();
 }
 
-async function pickEvent() {
-    console.log('Carregando eventos...');
-    const candidates = await listArchiveCandidates();
-    if (candidates.length === 0) {
-        console.log('Nenhum evento disponível para arquivar.');
-        return null;
-    }
-
-    console.log('');
-    candidates.forEach(({ event, blockers }, index) => {
-        const status = blockers.length === 0 ? 'PODE ARQUIVAR' : `bloqueado (${blockers.length} pedido(s))`;
-        console.log(`${String(index + 1).padStart(2)}) ${event.name.slice(0, 45).padEnd(45)} ${formatDate(event.date, 'UTC')}  ${String(event.photoCount).padStart(6)} fotos  ${status}`);
-    });
-
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const answer = await rl.question('\nNúmero do evento (Enter para sair): ');
-    rl.close();
-    const chosen = candidates[parseInt(answer, 10) - 1];
-    return chosen ? chosen.event.id : null;
-}
-
 async function run() {
     const args = parseArgs(process.argv.slice(2));
-    const { dryRun, yes } = args;
-    const eventId = args.eventId || (await pickEvent());
-    if (!eventId) return 0;
+    const { eventId, dryRun, yes } = args;
+    if (!eventId) {
+        console.error('Uso: ./arquivar-evento.sh <event-id> [--dry-run]');
+        return 1;
+    }
 
     const overview = await getEventOverview(eventId);
     printOverview(overview);

@@ -69,11 +69,6 @@ describe('getArchiveBlockers', () => {
         expect(blockers.map(b => [b.code, b.orderId])).toEqual([['UNPAID_RECENT', 'fresh']]);
     });
 
-    test('blocks events that have not happened yet', async () => {
-        event.date = daysAhead(10);
-        expect((await getArchiveBlockers(event, NOW)).map(b => b.code)).toEqual(['EVENT_NOT_HAPPENED']);
-    });
-
     test('rejects an already archived event', async () => {
         event.archivedAt = daysAgo(1);
         expect((await getArchiveBlockers(event, NOW))[0].code).toBe('ALREADY_ARCHIVED');

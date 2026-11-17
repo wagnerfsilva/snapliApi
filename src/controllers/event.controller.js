@@ -348,8 +348,8 @@ class EventController {
             if (req.userRole === 'fotografo' && event.createdBy !== req.userId) {
                 return res.status(403).json({ success: false, message: 'Acesso negado a este evento' });
             }
-            if (event.archivedAt && (isActive === true || isActive === 'true')) {
-                return res.status(409).json({ success: false, message: 'Evento arquivado não pode ser reativado' });
+            if (event.archivedAt) {
+                return res.status(409).json({ success: false, message: 'Evento arquivado não pode ser editado' });
             }
             try {
                 Object.assign(updateData, videoPricingFields(req.body, event));
@@ -399,6 +399,13 @@ class EventController {
                 return res.status(404).json({
                     success: false,
                     message: 'Evento não encontrado'
+                });
+            }
+
+            if (event.archivedAt) {
+                return res.status(409).json({
+                    success: false,
+                    message: 'Evento arquivado não pode ser excluído'
                 });
             }
 

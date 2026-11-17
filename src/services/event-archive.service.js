@@ -44,10 +44,6 @@ async function getArchiveBlockers(event, now = new Date()) {
         return blockers;
     }
 
-    if (event.date && new Date(event.date) > now) {
-        blockers.push({ code: 'EVENT_NOT_HAPPENED', message: 'O evento ainda não aconteceu' });
-    }
-
     const orders = await loadEventOrders(event.id);
     const unpaidCutoff = now.getTime() - UNPAID_GRACE_DAYS * DAY_MS;
 
@@ -98,21 +94,6 @@ async function getEventOverview(eventId, now = new Date()) {
         },
         blockers: await getArchiveBlockers(event, now)
     };
-}
-
-/**
- * Lists non-archived events (newest first) with their blockers, for the CLI picker.
- */
-async function listArchiveCandidates(now = new Date()) {
-    const events = await Event.findAll({
-        where: { archivedAt: null },
-        order: [['date', 'DESC']],
-        attributes: ['id', 'name', 'date', 'photoCount', 'videoCount']
-    });
-    return Promise.all(events.map(async event => ({
-        event,
-        blockers: await getArchiveBlockers(event, now)
-    })));
 }
 
 async function collectMedia(eventId) {
@@ -198,6 +179,5 @@ module.exports = {
     effectiveDownloadExpiry,
     getArchiveBlockers,
     getEventOverview,
-    listArchiveCandidates,
     archiveEvent
 };
