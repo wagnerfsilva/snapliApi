@@ -120,6 +120,15 @@ O checkout bloqueia uma nova compra (`409`, código `RECENT_PURCHASE_OVERLAP`) q
 
 PIX pendentes, pedidos em processamento, estornados, cancelados e cortesias não bloqueiam. O intervalo é contado a partir de `paidAt`, inclusive no limite de 7 dias. Esta regra não implementa atualização de compras anteriores nem impede múltiplos PIX pendentes.
 
+#### Atualizar fotos de uma compra total (somente administrador)
+
+No painel de vendas do evento, o botão **Buscar novas fotos** aparece somente para pedidos `paid`/`completed`, com data de pagamento, em evento ativo e não arquivado, cujo valor pago pelas fotos daquele evento corresponda ao preço atual de **Todas as fotos** (`allPhotosPrice`). A comparação usa centavos e o mesmo rateio proporcional dos itens usado na receita por evento; vídeos e outros eventos não contam para atingir o preço do pacote de fotos. Pedidos antigos são avaliados pela mesma regra de valor, pois não registram a modalidade de preço contratada.
+
+- `POST /api/orders/:orderId/events/:eventId/photo-updates/preview`: enviar `searchPhoto` (JPG, PNG ou WebP, até 10 MB). Busca facial apenas em fotos processadas do mesmo evento, criadas após `paidAt` e ausentes do pedido. A referência é usada em memória e não é salva.
+- `POST /api/orders/:orderId/events/:eventId/photo-updates/confirm`: enviar `previewToken` e `photoIds` selecionados. A prévia assinada vale por 15 minutos e é vinculada ao administrador, pedido, evento e resultados encontrados. O administrador deve revisar a prévia antes de confirmar.
+
+A confirmação revalida elegibilidade e disponibilidade em transação, bloqueia o pedido contra confirmações simultâneas e ignora fotos já incluídas. Os novos itens recebem preço zero: valor total, pagamento, preços anteriores, rateio financeiro, comissão, token e vencimento de download não mudam. O cliente usa o mesmo link, sem cobrança ou e-mail automático. A função não inclui vídeos e não estende o prazo de download.
+
 ### Downloads
 - `GET /api/download/:token` - Portal de download
 - `POST /api/download/:token/download` - Download das fotos

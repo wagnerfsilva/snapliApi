@@ -4,8 +4,7 @@ const rekognitionService = require('../services/rekognition.service');
 const s3Service = require('../services/s3.service');
 const logger = require('../utils/logger');
 const { previewUrls } = require('../services/media-preview.service');
-
-const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const { photoMatchConditions } = require('../services/face-search.service');
 
 function basenameWithoutExt(value) {
     if (!value) return null;
@@ -49,17 +48,7 @@ class SearchController {
                 where: { faceId: { [Op.in]: videoMatches.map(match => match.faceId) } },
                 attributes: ['faceId', 'photoId', 'timestampMs', 'processingVersion']
             }) : [];
-            const externalImageIds = [...new Set(searchResult.matches.map(match => match.externalImageId).filter(id => id && !id.startsWith('video_')))];
-            const photoIds = externalImageIds.filter(id => uuidRegex.test(id));
-
-            const matchConditions = externalImageIds.flatMap(externalImageId => ([
-                { originalKey: { [Op.like]: `%/${externalImageId}.%` } },
-                { originalFilename: { [Op.like]: `${externalImageId}.%` } }
-            ]));
-
-            if (photoIds.length > 0) {
-                matchConditions.push({ id: { [Op.in]: photoIds } });
-            }
+            const matchConditions = photoMatchConditions(searchResult.matches);
             if (indexedVideoFaces.length) matchConditions.push({ id: { [Op.in]: [...new Set(indexedVideoFaces.map(face => face.photoId))] } });
             if (!matchConditions.length) {
                 return res.json({ success: true, data: { photos: [], matchCount: 0, searchedFaceDetected: true } });

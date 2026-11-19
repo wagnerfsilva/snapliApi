@@ -4,6 +4,8 @@ const orderController = require('../controllers/order.controller');
 const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
 const { body, query, param } = require('express-validator');
 const validate = require('../middleware/validate');
+const photoUpdateController = require('../controllers/order-photo-update.controller');
+const { uploadSearchPhoto } = require('../middleware/upload');
 
 /**
  * PUBLIC ROUTES
@@ -50,6 +52,19 @@ router.get('/', authenticate, orderController.listOrders);
 
 // List orders by event
 router.get('/event/:eventId', authenticate, orderController.listOrdersByEvent);
+
+router.post('/:orderId/events/:eventId/photo-updates/preview', authenticate, authorize('admin'), [
+    param('orderId').isUUID().withMessage('Pedido inválido'),
+    param('eventId').isUUID().withMessage('Evento inválido')
+], validate, uploadSearchPhoto, photoUpdateController.preview);
+
+router.post('/:orderId/events/:eventId/photo-updates/confirm', authenticate, authorize('admin'), [
+    param('orderId').isUUID().withMessage('Pedido inválido'),
+    param('eventId').isUUID().withMessage('Evento inválido'),
+    body('previewToken').isString().bail().isLength({ min: 1, max: 500000 }).withMessage('Prévia inválida'),
+    body('photoIds').isArray({ min: 1, max: 4096 }).withMessage('Selecione as fotos da prévia'),
+    body('photoIds.*').isUUID().withMessage('Foto inválida')
+], validate, photoUpdateController.confirm);
 
 // Sync order with Asaas
 router.post('/:orderId/sync-asaas', authenticate, orderController.syncOrderWithAsaas);

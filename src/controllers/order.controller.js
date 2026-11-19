@@ -908,6 +908,28 @@ exports.listOrdersByEvent = async (req, res) => {
 
         const frontendUrl = process.env.FRONTEND_URL || 'https://web.snapli.com.br';
 
+        const updatableOrders = new Set();
+        if (req.userRole === 'admin' && orders.some(order => ['paid', 'completed'].includes(order.status))) {
+            const { eligibility } = require('../services/order-photo-update.service');
+            const [event, allItems] = await Promise.all([
+                Event.findByPk(eventId),
+                OrderItem.findAll({
+                    where: { orderId: { [Op.in]: orders.map(order => order.id) } },
+                    include: [{ model: Photo, as: 'photo', attributes: ['id', 'eventId', 'mediaType'], required: true }]
+                })
+            ]);
+            const itemsByOrder = new Map();
+            for (const item of allItems) {
+                if (!itemsByOrder.has(item.orderId)) itemsByOrder.set(item.orderId, []);
+                itemsByOrder.get(item.orderId).push(item);
+            }
+            for (const order of orders) {
+                if (eligibility(order, event, itemsByOrder.get(order.id) || []).eligible) {
+                    updatableOrders.add(order.id);
+                }
+            }
+        }
+
         res.json({
             success: true,
             orders: orders.map(order => ({
@@ -924,6 +946,7 @@ exports.listOrdersByEvent = async (req, res) => {
                     : null,
                 downloadExpiresAt: order.downloadExpiresAt,
                 paymentId: order.paymentId,
+                canUpdatePhotos: updatableOrders.has(order.id),
                 createdAt: order.createdAt
             })),
             total: orders.length
