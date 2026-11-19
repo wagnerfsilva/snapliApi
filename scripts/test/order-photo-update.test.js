@@ -88,7 +88,7 @@ beforeEach(() => {
     });
     models.Photo.findAll.mockResolvedValue([{
         id: newId, eventId, mediaType: 'photo', processingStatus: 'completed',
-        createdAt: new Date('2026-11-17T00:00:00Z'), watermarkedKey: 'marked.jpg',
+        createdAt: new Date('2026-11-15T00:00:00Z'), watermarkedKey: 'marked.jpg',
         originalKey: 'private-original.jpg', faceData: ['private-face']
     }]);
     models.sequelize.transaction.mockImplementation(callback => callback(transaction));
@@ -141,17 +141,19 @@ test.each([null, 'fotografo', 'organizador'])('requires an administrator for bot
     expect(rekognition.searchFacesByImage).not.toHaveBeenCalled();
 });
 
-test('preview limits search to new processed photos of this event, excludes purchased items and exposes only previews', async () => {
+test('preview includes photos from before payment, restricts the event, excludes purchased items and exposes only previews', async () => {
     const response = await previewRequest();
     expect(response.status).toBe(200);
     expect(rekognition.searchFacesByImage).toHaveBeenCalledWith(Buffer.from('reference'), 4096);
     const where = models.Photo.findAll.mock.calls[0][0].where;
     expect(where).toMatchObject({
-        eventId, mediaType: 'photo', processingStatus: 'completed', createdAt: { [Op.gt]: order.paidAt }
+        eventId, mediaType: 'photo', processingStatus: 'completed'
     });
+    expect(where).not.toHaveProperty('createdAt');
     expect(where[Op.and][1]).toEqual({ id: { [Op.notIn]: [oldId] } });
     expect(where[Op.and][0][Op.or]).toContainEqual({ id: { [Op.in]: [newId] } });
     expect(response.body.data.photos).toEqual([expect.objectContaining({ id: newId, watermarkedUrl: 'signed:marked.jpg' })]);
+    expect(new Date(response.body.data.photos[0].createdAt).getTime()).toBeLessThan(order.paidAt.getTime());
     const payload = jwt.verify(response.body.data.previewToken, config.secret, { audience: 'snapli-order-photo-update' });
     expect(payload).toMatchObject({ orderId, eventId, adminId, photoIds: [newId] });
     expect(payload.exp - payload.iat).toBe(15 * 60);
@@ -180,7 +182,7 @@ test('missing reference or no detected face is rejected explicitly', async () =>
     expect((await previewRequest()).status).toBe(400);
 });
 
-test('confirmation adds selected photos at zero price, keeps all order fields and is idempotent', async () => {
+test('confirmation accepts photos from before payment at zero price, keeps all order fields and is idempotent', async () => {
     const originalOrder = { ...order };
     const response = await confirmRequest({ photoIds: [newId, newId] });
     expect(response.status).toBe(200);
@@ -191,9 +193,10 @@ test('confirmation adds selected photos at zero price, keeps all order fields an
     expect(models.Order.findByPk).toHaveBeenCalledWith(orderId, { transaction, lock: transaction.LOCK.UPDATE });
     expect(models.Event.findByPk).toHaveBeenCalledWith(eventId, { transaction, lock: transaction.LOCK.SHARE });
     expect(models.Photo.findAll.mock.calls[0][0]).toMatchObject({
-        where: { eventId, mediaType: 'photo', processingStatus: 'completed', createdAt: { [Op.gt]: order.paidAt } },
+        where: { eventId, mediaType: 'photo', processingStatus: 'completed' },
         transaction, lock: transaction.LOCK.SHARE
     });
+    expect(models.Photo.findAll.mock.calls[0][0].where).not.toHaveProperty('createdAt');
     expect(order).toEqual(originalOrder);
     expect(items[0].price).toBe('99.90');
     expect(pix.createPixPayment).not.toHaveBeenCalled();

@@ -54,15 +54,14 @@ async function context(orderId, eventId, transaction) {
     return { order, event, items };
 }
 
-function candidateWhere(order, eventId) {
+function candidateWhere(eventId) {
     return {
-        eventId, mediaType: 'photo', processingStatus: 'completed',
-        createdAt: { [Op.gt]: order.paidAt }
+        eventId, mediaType: 'photo', processingStatus: 'completed'
     };
 }
 
 async function preview(orderId, eventId, adminId, imageBuffer) {
-    const { order, event, items } = await context(orderId, eventId);
+    const { event, items } = await context(orderId, eventId);
     const result = await rekognition.searchFacesByImage(imageBuffer, 4096);
     if (!result.matchCount && (result.error || !result.searchedFaceConfidence)) {
         fail(400, 'Nenhum rosto detectado. Envie uma foto com o rosto da pessoa visível.');
@@ -70,7 +69,7 @@ async function preview(orderId, eventId, adminId, imageBuffer) {
     const conditions = photoMatchConditions(result.matches);
     const photos = conditions.length ? await Photo.findAll({
         where: {
-            ...candidateWhere(order, eventId),
+            ...candidateWhere(eventId),
             [Op.and]: [
                 { [Op.or]: conditions },
                 { id: { [Op.notIn]: items.map(item => item.photoId) } }
@@ -108,12 +107,12 @@ async function confirm(orderId, eventId, adminId, previewToken, photoIds) {
         fail(400, 'Os arquivos selecionados não pertencem a esta prévia.');
     }
     return sequelize.transaction(async transaction => {
-        const { order, items } = await context(orderId, eventId, transaction);
+        const { items } = await context(orderId, eventId, transaction);
         const existingIds = new Set(items.map(item => item.photoId));
         const newIds = [...new Set(photoIds)].filter(id => !existingIds.has(id));
         if (!newIds.length) return { addedCount: 0 };
         const photos = await Photo.findAll({
-            where: { ...candidateWhere(order, eventId), id: { [Op.in]: newIds } },
+            where: { ...candidateWhere(eventId), id: { [Op.in]: newIds } },
             transaction, lock: transaction.LOCK.SHARE
         });
         if (photos.length !== newIds.length) {
