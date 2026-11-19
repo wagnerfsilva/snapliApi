@@ -6,10 +6,7 @@ const { rekognition } = require('../config/aws');
 const upload = require('../services/video-upload.service');
 const { validateVideoPricing } = require('../services/video-pricing.service');
 const { previewUrls } = require('../services/media-preview.service');
-
-function allowed(req, event) {
-    return req.userRole === 'admin' || (req.userRole === 'fotografo' && event.createdBy === req.userId);
-}
+const { assertEventAccess } = require('../services/event-access.service');
 
 async function ownVideo(req, res, transaction) {
     const photo = await Photo.findByPk(req.params.id, {
@@ -20,10 +17,7 @@ async function ownVideo(req, res, transaction) {
         res.status(404).json({ success: false, message: 'Video nao encontrado' });
         return null;
     }
-    if (!allowed(req, photo.event)) {
-        res.status(403).json({ success: false, message: 'Acesso negado ao evento' });
-        return null;
-    }
+    assertEventAccess(req, photo.event, true);
     return photo;
 }
 
@@ -33,7 +27,7 @@ exports.start = async (req, res, next) => {
     try {
         const event = await Event.findByPk(req.body.eventId);
         if (!event) return res.status(404).json({ success: false, message: 'Evento nao encontrado' });
-        if (!allowed(req, event)) return res.status(403).json({ success: false, message: 'Acesso negado ao evento' });
+        assertEventAccess(req, event, true);
         if (event.archivedAt) return res.status(409).json({ success: false, message: 'Evento arquivado nao aceita novos uploads' });
         if (!event.isActive || !event.videoEnabled) return res.status(400).json({ success: false, message: 'Habilite videos e configure seus precos no evento' });
         if (!require('../services/video-lambda.service').isReady()) {

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const withdrawalController = require('../controllers/withdrawal.controller');
 const { authenticate, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
@@ -28,9 +28,11 @@ const updateStatusValidation = [
         .withMessage('Observação deve ter no máximo 1000 caracteres')
 ];
 
-router.use(authenticate, authorize('admin', 'organizador'));
+router.use(authenticate, authorize('admin', 'organizador', 'fotografo'));
 
-router.get('/balance/:eventId', param('eventId').isUUID(), validate, withdrawalController.getBalance);
+router.get('/balance/:eventId', param('eventId').isUUID(),
+    query('commissionType').optional().isIn(['organizer', 'photographer']).withMessage('Tipo de comissão inválido'),
+    validate, withdrawalController.getBalance);
 router.get('/', withdrawalController.getAll);
 router.post('/', createValidation, validate, withdrawalController.create);
 router.patch('/:id/status', authorize('admin'), updateStatusValidation, validate, withdrawalController.updateStatus);

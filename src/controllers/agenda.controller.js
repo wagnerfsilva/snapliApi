@@ -1,5 +1,6 @@
 const { AgendaEntry, Event } = require('../models');
 const { Op } = require('sequelize');
+const { eventScope } = require('../services/event-access.service');
 
 class AgendaController {
     async getAll(req, res, next) {
@@ -8,10 +9,9 @@ class AgendaController {
             const endExclusive = new Date(`${endDate}T00:00:00.000Z`);
             endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
             const eventWhere = {
-                date: { [Op.gte]: new Date(`${startDate}T00:00:00.000Z`), [Op.lt]: endExclusive }
+                date: { [Op.gte]: new Date(`${startDate}T00:00:00.000Z`), [Op.lt]: endExclusive },
+                [Op.and]: [eventScope(req)]
             };
-            if (req.userRole === 'fotografo') eventWhere.createdBy = req.userId;
-            if (req.userRole === 'organizador') eventWhere.organizerId = req.userId;
 
             const [entries, events] = await Promise.all([
                 AgendaEntry.findAll({

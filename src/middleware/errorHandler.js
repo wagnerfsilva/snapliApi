@@ -91,7 +91,7 @@ const errorHandler = (err, req, res, next) => {
 
     // Default error
     const statusCode = err.statusCode || 500;
-    const message = process.env.NODE_ENV === 'production'
+    const message = process.env.NODE_ENV === 'production' && !(statusCode >= 400 && statusCode < 500)
         ? 'Erro interno do servidor'
         : err.message;
 

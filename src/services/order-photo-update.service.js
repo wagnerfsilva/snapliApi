@@ -5,6 +5,7 @@ const jwtConfig = require('../config/jwt');
 const rekognition = require('./rekognition.service');
 const { photoMatchConditions } = require('./face-search.service');
 const { previewUrls } = require('./media-preview.service');
+const { isEventAvailable } = require('./event-access.service');
 
 const previewAudience = 'snapli-order-photo-update';
 
@@ -18,7 +19,7 @@ function eligibility(order, event, items) {
     if (!['paid', 'completed'].includes(order.status) || !order.paidAt) {
         return { eligible: false, reason: 'Apenas pedidos pagos podem receber novas fotos.' };
     }
-    if (!event?.isActive || event.archivedAt) {
+    if (!isEventAvailable(event)) {
         return { eligible: false, reason: 'O evento precisa estar ativo e não arquivado.' };
     }
     const fullPriceCents = Math.round(Number(event.allPhotosPrice) * 100);

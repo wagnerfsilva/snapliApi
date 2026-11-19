@@ -76,7 +76,7 @@ beforeEach(() => {
         paidAt: new Date('2026-11-16T20:00:00Z'), downloadToken: 'original-token',
         downloadExpiresAt: new Date('2027-02-01T00:00:00Z')
     };
-    event = { id: eventId, name: 'Evento', isActive: true, archivedAt: null, allPhotosPrice: '99.90' };
+    event = { id: eventId, createdBy: adminId, name: 'Evento', isActive: true, approvalStatus: 'approved', archivedAt: null, allPhotosPrice: '99.90' };
     items = [{ orderId, photoId: oldId, price: '99.90', photo: { id: oldId, eventId, mediaType: 'photo' } }];
     models.Order.findByPk.mockImplementation(async () => order);
     models.Event.findByPk.mockImplementation(async () => event);
@@ -109,6 +109,7 @@ test.each(['pending', 'processing', 'refunded', 'cancelled', 'courtesy'])('rejec
 
 test.each([
     ['inactive', () => { event.isActive = false; }],
+    ['pending approval', () => { event.approvalStatus = 'pending'; }],
     ['archived', () => { event.archivedAt = new Date(); }],
     ['no full-photo price', () => { event.allPhotosPrice = null; }],
     ['partial purchase', () => { order.totalAmount = '99.89'; }],
@@ -262,7 +263,7 @@ test('zero-price additions preserve real event allocation and commission SQL', a
         CREATE TABLE orders (id TEXT, "totalAmount" REAL, status TEXT);
         CREATE TABLE order_items (id TEXT, "orderId" TEXT, "photoId" TEXT, price REAL);
         CREATE TABLE photos (id TEXT, "eventId" TEXT);
-        CREATE TABLE withdrawal_requests ("eventId" TEXT, amount REAL, status TEXT);
+        CREATE TABLE withdrawal_requests ("eventId" TEXT, amount REAL, status TEXT, "organizerId" TEXT, "photographerId" TEXT);
         INSERT INTO orders VALUES ('order', 199.80, 'paid');
         INSERT INTO photos VALUES ('old', 'event'), ('new', 'event'), ('other', 'other-event');
         INSERT INTO order_items VALUES ('old-item', 'order', 'old', 99.90), ('other-item', 'order', 'other', 99.90);

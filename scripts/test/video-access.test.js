@@ -32,19 +32,20 @@ beforeEach(() => {
     committed = false;
     response = { headersSent: false, status: jest.fn().mockReturnThis(), json: jest.fn(function () { this.headersSent = true; return this; }) };
     next = jest.fn();
+    Event.findByPk.mockResolvedValue({ createdBy: 'owner', approvalStatus: 'approved' });
     sequelize.transaction.mockImplementation(async callback => { const result = await callback({ LOCK: { UPDATE: 'UPDATE' } }); committed = true; return result; });
 });
 
 test('photographers cannot start uploads into another event', async () => {
     Event.findByPk.mockResolvedValue({ createdBy: 'other' });
     await video.start(request, response, next);
-    expect(response.status).toHaveBeenCalledWith(403);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
     expect(uploads.start).not.toHaveBeenCalled();
 });
 
 test('completion enqueues exactly once and returns only after commit', async () => {
     const update = jest.fn();
-    const media = { id: 'video', mediaType: 'video', uploadStatus: 'uploading', uploadId: 's3', event: { createdBy: 'owner' }, update };
+    const media = { id: 'video', mediaType: 'video', uploadStatus: 'uploading', uploadId: 's3', event: { createdBy: 'owner', approvalStatus: 'approved' }, update };
     Photo.findByPk.mockResolvedValue(media);
     response.json.mockImplementation(() => { expect(committed).toBe(true); });
     await video.finish(request, response, next);
@@ -59,13 +60,13 @@ test('completion enqueues exactly once and returns only after commit', async () 
 test('part upload rejects another photographer before sending to AWS', async () => {
     Photo.findByPk.mockResolvedValue({ mediaType: 'video', event: { createdBy: 'other' } });
     await video.part(request, response, next);
-    expect(response.status).toHaveBeenCalledWith(403);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
     expect(uploads.part).not.toHaveBeenCalled();
 });
 
 test('retry queues completed uploads with failure without reading original as an image', async () => {
     Photo.findByPk.mockResolvedValue({ id: 'video', eventId: 'event', mediaType: 'video', uploadStatus: 'completed', processingStatus: 'failed' });
-    Event.findByPk.mockResolvedValue({ createdBy: 'owner' });
+    Event.findByPk.mockResolvedValue({ createdBy: 'owner', approvalStatus: 'approved' });
     Photo.update.mockResolvedValue([1]);
     await photos.retryProcessing(request, response, next);
     expect(Photo.update.mock.calls[0][0]).toMatchObject({ processingStatus: 'pending', processingAttempts: 0 });
@@ -74,7 +75,7 @@ test('retry queues completed uploads with failure without reading original as an
 
 test.each(['pending', 'processing', 'completed'])('retry cannot race an active or completed %s video', async processingStatus => {
     Photo.findByPk.mockResolvedValue({ id: 'video', eventId: 'event', mediaType: 'video', uploadStatus: 'completed', processingStatus });
-    Event.findByPk.mockResolvedValue({ createdBy: 'owner' });
+    Event.findByPk.mockResolvedValue({ createdBy: 'owner', approvalStatus: 'approved' });
     await photos.retryProcessing(request, response, next);
     expect(response.status).toHaveBeenCalledWith(409);
     expect(Photo.update).not.toHaveBeenCalled();

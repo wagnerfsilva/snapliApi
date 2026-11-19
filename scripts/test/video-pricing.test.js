@@ -8,13 +8,14 @@ jest.mock('../../src/models', () => ({
     Event: { create: jest.fn(), findByPk: jest.fn() },
     User: { findByPk: jest.fn() },
     Order: { create: jest.fn(), findByPk: jest.fn(), findOne: jest.fn() },
-    OrderItem: { create: jest.fn() }
+    OrderItem: { create: jest.fn() },
+    sequelize: { transaction: jest.fn() }
 }));
 jest.mock('../../src/services/pix.service', () => ({ createPixPayment: jest.fn() }));
 jest.mock('../../src/services/email.service', () => ({}));
 jest.mock('../../src/utils/logger', () => ({ info: jest.fn(), error: jest.fn() }));
 
-const { Photo, Event, Order, OrderItem } = require('../../src/models');
+const { Photo, Event, Order, OrderItem, sequelize } = require('../../src/models');
 const pixService = require('../../src/services/pix.service');
 const { createOrder } = require('../../src/controllers/order.controller');
 const eventController = require('../../src/controllers/event.controller');
@@ -68,7 +69,10 @@ function response() {
 }
 
 describe('video event configuration', () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => {
+        jest.clearAllMocks();
+        sequelize.transaction.mockImplementation(callback => callback({ LOCK: { UPDATE: 'UPDATE' } }));
+    });
 
     test('existing event creation leaves video disabled', async () => {
         const res = response();
@@ -80,14 +84,15 @@ describe('video event configuration', () => {
 
     test('cannot enable video sales without a video price', async () => {
         const res = response();
-        await eventController.create({ body: { videoEnabled: true } }, res, jest.fn());
-        expect(res.status).toHaveBeenCalledWith(400);
+        const next = jest.fn();
+        await eventController.create({ body: { videoEnabled: true } }, res, next);
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
         expect(Event.create).not.toHaveBeenCalled();
     });
 
     test('partial update preserves existing video packages and price', async () => {
         const update = jest.fn();
-        Event.findByPk.mockResolvedValue({ ...pricing, freeVideosCount: 2, videoPricingPackages: [{ quantity: 3, price: '20.00' }], createdBy: 'owner', update });
+        Event.findByPk.mockResolvedValue({ ...pricing, approvalStatus: 'approved', freeVideosCount: 2, videoPricingPackages: [{ quantity: 3, price: '20.00' }], createdBy: 'owner', update });
         await eventController.update({ params: { id: 'event' }, body: { name: 'Renamed' }, userRole: 'fotografo', userId: 'owner' }, response(), jest.fn());
         expect(update.mock.calls[0][0]).toMatchObject({ name: 'Renamed', ...pricing, freeVideosCount: 2, videoPricingPackages: [{ quantity: 3, price: '20.00' }] });
     });
@@ -100,23 +105,25 @@ describe('video event configuration', () => {
 
     test('partial update can disable video freebies without changing photo freebies', async () => {
         const update = jest.fn();
-        Event.findByPk.mockResolvedValue({ ...pricing, freePhotosCount: 3, freeVideosCount: 2, createdBy: 'owner', update });
+        Event.findByPk.mockResolvedValue({ ...pricing, approvalStatus: 'approved', freePhotosCount: 3, freeVideosCount: 2, createdBy: 'owner', update });
         await eventController.update({ params: { id: 'event' }, body: { freeVideosCount: 0 }, userRole: 'fotografo', userId: 'owner' }, response(), jest.fn());
-        expect(update.mock.calls[0][0]).toMatchObject({ freeVideosCount: 0, freePhotosCount: undefined });
+        expect(update.mock.calls[0][0]).toMatchObject({ freeVideosCount: 0 });
+        expect(update.mock.calls[0][0]).not.toHaveProperty('freePhotosCount');
     });
 
     test('another photographer cannot edit video pricing', async () => {
         const update = jest.fn();
         const res = response();
+        const next = jest.fn();
         Event.findByPk.mockResolvedValue({ createdBy: 'owner', update });
-        await eventController.update({ params: { id: 'event' }, body: { videoEnabled: true, pricePerVideo: 10 }, userRole: 'fotografo', userId: 'other' }, res, jest.fn());
-        expect(res.status).toHaveBeenCalledWith(403);
+        await eventController.update({ params: { id: 'event' }, body: { videoEnabled: true, pricePerVideo: 10 }, userRole: 'fotografo', userId: 'other' }, res, next);
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
         expect(update).not.toHaveBeenCalled();
     });
 });
 
 describe('mixed order pricing', () => {
-    const event = { ...pricing, id: 'event', name: 'Event', isActive: true, pricePerPhoto: '5.00', freePhotosCount: 1 };
+    const event = { ...pricing, id: 'event', name: 'Event', isActive: true, approvalStatus: 'approved', pricePerPhoto: '5.00', freePhotosCount: 1 };
     const video = { id: 'video', eventId: 'event', mediaType: 'video', processingStatus: 'completed', previewKey: 'preview.mp4', event };
     const photo = { id: 'photo', eventId: 'event', mediaType: 'photo', event };
 

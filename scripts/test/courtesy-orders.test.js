@@ -6,7 +6,7 @@ jest.mock('../../src/models', () => ({
     Order: { create: jest.fn(), findByPk: jest.fn(), findOne: jest.fn(), findAll: jest.fn(), findAndCountAll: jest.fn(), destroy: jest.fn() },
     OrderItem: { bulkCreate: jest.fn(), create: jest.fn() },
     Photo: { findAll: jest.fn(), destroy: jest.fn() },
-    Event: {},
+    Event: { findByPk: jest.fn() },
     User: { findByPk: jest.fn() },
     sequelize: { transaction: jest.fn() }
 }));
@@ -29,7 +29,7 @@ const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const { Sequelize, DataTypes, Op, fn, col, where } = require('sequelize');
 const jwtConfig = require('../../src/config/jwt');
-const { Order, OrderItem, Photo, User, sequelize } = require('../../src/models');
+const { Order, OrderItem, Photo, Event, User, sequelize } = require('../../src/models');
 const pix = require('../../src/services/pix.service');
 const email = require('../../src/services/email.service');
 const storage = require('../../src/services/s3.service');
@@ -56,7 +56,7 @@ function media(id = photoId, mediaType = 'photo') {
     return {
         id, mediaType, originalKey: `original/${id}`, originalFilename: 'original.jpg',
         processingStatus: 'completed', previewKey: 'preview',
-        event: { id: 'event', isActive: true, videoEnabled: true }
+        event: { id: 'event', isActive: true, approvalStatus: 'approved', videoEnabled: true }
     };
 }
 
@@ -66,12 +66,28 @@ function postCourtesy(body = {}) {
     });
 }
 
+test.each(['photo', 'video'])('pending event cannot sell or grant courtesy %s even when active', async mediaType => {
+    const pending = media(photoId, mediaType);
+    pending.event = { ...pending.event, approvalStatus: 'pending', pricePerPhoto: 15 };
+    Photo.findAll.mockResolvedValue([pending]);
+    const purchase = await request(app).post('/orders').send({
+        customerName: 'Cliente', customerEmail: 'client@example.com', items: [{ photoId }]
+    });
+    expect(purchase.status).toBe(409);
+    expect((await postCourtesy()).status).toBe(400);
+    expect(Order.create).not.toHaveBeenCalled();
+    expect(OrderItem.create).not.toHaveBeenCalled();
+    expect(OrderItem.bulkCreate).not.toHaveBeenCalled();
+    expect(pix.createPixPayment).not.toHaveBeenCalled();
+});
+
 beforeEach(() => {
     jest.clearAllMocks();
     sequelize.transaction.mockImplementation(callback => callback(transaction));
     Order.create.mockImplementation(async data => ({ id: 'order-id', ...data }));
     OrderItem.bulkCreate.mockResolvedValue([]);
     Photo.findAll.mockResolvedValue([media()]);
+    Event.findByPk.mockResolvedValue({ id: 'event-id', createdBy: 'admin-id', approvalStatus: 'approved' });
     Order.findByPk.mockResolvedValue(null);
     Order.findOne.mockResolvedValue(null);
     Order.findAll.mockResolvedValue([]);
@@ -283,7 +299,7 @@ test('normal public checkout still requires email even when free-order fields ar
 
 test('public checkout ignores forged courtesy and pricing fields and still creates a paid PIX charge', async () => {
     Photo.findAll.mockResolvedValue([{
-        ...media(), eventId: 'event', event: { id: 'event', name: 'Evento', pricePerPhoto: 15, isActive: true }
+        ...media(), eventId: 'event', event: { id: 'event', name: 'Evento', pricePerPhoto: 15, isActive: true, approvalStatus: 'approved' }
     }]);
     Order.create.mockImplementation(async data => ({ id: 'order-id', ...data, update: jest.fn() }));
     OrderItem.create.mockResolvedValue({});
@@ -387,7 +403,7 @@ describe('recent purchase matching against the generated SQL', () => {
         ['paid', day, 'person@example.com', videoId, 201]
     ])('previous %s purchase, age %s, email %s and file %s returns %s', async (status, age, email, previousPhotoId, expectedStatus) => {
         Photo.findAll.mockResolvedValue([{
-            ...media(), eventId: 'event', event: { id: 'event', name: 'Evento', pricePerPhoto: 15, isActive: true }
+            ...media(), eventId: 'event', event: { id: 'event', name: 'Evento', pricePerPhoto: 15, isActive: true, approvalStatus: 'approved' }
         }]);
         Order.create.mockImplementation(async data => ({ id: 'order-id', ...data, update: jest.fn() }));
         OrderItem.create.mockResolvedValue({});

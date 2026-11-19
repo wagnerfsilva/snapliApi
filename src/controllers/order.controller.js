@@ -5,6 +5,7 @@ const logger = require('../utils/logger');
 const crypto = require('crypto');
 const { quoteVideos } = require('../services/video-pricing.service');
 const { Op, fn, col, where } = require('sequelize');
+const { isEventAvailable, assertEventAccess } = require('../services/event-access.service');
 
 exports.listCourtesyOrders = async (req, res) => {
     try {
@@ -80,7 +81,7 @@ exports.createCourtesyOrder = async (req, res) => {
                 lock: transaction.LOCK.SHARE
             });
             if (photos.length !== photoIds.length || photos.some(photo =>
-                photo.processingStatus !== 'completed' || !photo.originalKey || !photo.event?.isActive ||
+                photo.processingStatus !== 'completed' || !photo.originalKey || !isEventAvailable(photo.event) ||
                 (photo.mediaType === 'video' && (!photo.event.videoEnabled || !photo.previewKey))
             )) {
                 return null;
@@ -150,7 +151,7 @@ exports.createOrder = async (req, res) => {
             include: [{
                 model: Event,
                 as: 'event',
-                attributes: ['id', 'name', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'photoCount', 'freePhotosCount', 'freeVideosCount', 'isActive', 'videoEnabled', 'pricePerVideo', 'videoPricingPackages', 'allVideosPrice']
+                attributes: ['id', 'name', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'photoCount', 'freePhotosCount', 'freeVideosCount', 'isActive', 'approvalStatus', 'archivedAt', 'videoEnabled', 'pricePerVideo', 'videoPricingPackages', 'allVideosPrice']
             }]
         });
 
@@ -159,6 +160,9 @@ exports.createOrder = async (req, res) => {
         }
 
         for (const photo of photos) {
+            if (!isEventAvailable(photo.event)) {
+                return res.status(photo.event?.approvalStatus === 'approved' ? 400 : 409).json({ error: 'Evento indisponível para compra. Refaça a busca.' });
+            }
             if (photo.mediaType === 'video' && (photo.processingStatus !== 'completed' || !photo.previewKey || !photo.event?.isActive)) {
                 return res.status(400).json({ error: 'Video indisponivel para compra' });
             }
@@ -888,6 +892,7 @@ exports.listOrdersByEvent = async (req, res) => {
         if (req.userRole === 'organizador') {
             return res.status(403).json({ error: 'Acesso negado' });
         }
+        assertEventAccess(req, await Event.findByPk(eventId), true);
 
         const orders = await Order.findAll({
             where: req.userRole === 'admin' ? {} : { status: { [Op.ne]: 'courtesy' } },
@@ -954,7 +959,7 @@ exports.listOrdersByEvent = async (req, res) => {
 
     } catch (error) {
         logger.error('Erro ao listar pedidos do evento:', error);
-        res.status(500).json({ error: 'Erro ao listar pedidos do evento' });
+        res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'Erro ao listar pedidos do evento' });
     }
 };
 

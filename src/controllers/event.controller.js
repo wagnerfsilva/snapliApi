@@ -2,6 +2,24 @@ const { Event, Photo, User, sequelize } = require('../models');
 const { Op, QueryTypes } = require('sequelize');
 const logger = require('../utils/logger');
 const { validateVideoPricing } = require('../services/video-pricing.service');
+const { eventScope, assertEventAccess, fail } = require('../services/event-access.service');
+const { validateEventCommissions, calculateCommissionBalance } = require('../services/commission.service');
+
+const commissionKeys = ['organizerId', 'organizerCommissionPercentage', 'photographerId', 'photographerCommissionPercentage'];
+
+function eventChanges(body, current) {
+    const data = {};
+    for (const key of ['name', 'date', 'description', 'location', 'isActive', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice']) {
+        if (body[key] !== undefined) data[key] = body[key];
+    }
+    if (body.freePhotosCount !== undefined) data.freePhotosCount = clampFreePhotosCount(body.freePhotosCount);
+    try {
+        Object.assign(data, videoPricingFields(body, current));
+    } catch (error) {
+        fail(400, error.message);
+    }
+    return data;
+}
 
 function videoPricingFields(body, current = {}) {
     const fields = {
@@ -24,18 +42,6 @@ function clampFreePhotosCount(value) {
     const parsed = parseInt(value, 10);
     if (Number.isNaN(parsed)) return 0;
     return Math.min(Math.max(parsed, 0), 3);
-}
-
-// Returns an error message if organizerId doesn't reference an active organizador, otherwise null
-async function validateOrganizer(organizerId) {
-    const organizer = await User.findByPk(organizerId);
-    if (!organizer || organizer.role !== 'organizador') {
-        return 'organizerId deve referenciar um usuário com role organizador';
-    }
-    if (!organizer.isActive) {
-        return 'Organizador está inativo';
-    }
-    return null;
 }
 
 // Computes revenue/paid orders/requested amount for the given events in 2 batched
@@ -73,7 +79,9 @@ async function attachSalesMetrics(events) {
         ),
         sequelize.query(
             `
-            SELECT "eventId", COALESCE(SUM(amount), 0) AS "requestedAmount"
+            SELECT "eventId",
+                COALESCE(SUM(CASE WHEN "organizerId" IS NOT NULL THEN amount ELSE 0 END), 0) AS "requestedAmount",
+                COALESCE(SUM(CASE WHEN "photographerId" IS NOT NULL THEN amount ELSE 0 END), 0) AS "photographerRequestedAmount"
             FROM withdrawal_requests
             WHERE "eventId" IN (:eventIds)
             AND status IN ('pending', 'approved', 'paid')
@@ -91,6 +99,9 @@ async function attachSalesMetrics(events) {
         event.setDataValue('totalRevenue', sale ? sale.totalRevenue : '0');
         event.setDataValue('paidOrdersCount', sale ? sale.paidOrdersCount : '0');
         event.setDataValue('requestedAmount', withdrawals.get(event.id)?.requestedAmount ?? '0');
+        event.setDataValue('photographerRequestedAmount', withdrawals.get(event.id)?.photographerRequestedAmount ?? '0');
+        event.setDataValue('organizerBalance', calculateCommissionBalance(sale?.totalRevenue || 0, event.organizerCommissionPercentage, withdrawals.get(event.id)?.requestedAmount));
+        event.setDataValue('photographerBalance', calculateCommissionBalance(sale?.totalRevenue || 0, event.photographerCommissionPercentage, withdrawals.get(event.id)?.photographerRequestedAmount));
     }
 }
 
@@ -105,6 +116,7 @@ class EventController {
                 limit = 20,
                 search = '',
                 isActive,
+                approvalStatus,
                 includeArchived,
                 startDate,
                 endDate,
@@ -118,6 +130,8 @@ class EventController {
 
             // Build where clause
             const where = {};
+            where[Op.and] = [eventScope(req)];
+            if (approvalStatus !== undefined) where.approvalStatus = approvalStatus;
 
             if (search) {
                 where[Op.or] = [
@@ -142,16 +156,6 @@ class EventController {
                 if (endDate) where.date[Op.lte] = new Date(endDate);
             }
 
-            // Fotografo only sees events they created
-            if (req.userRole === 'fotografo') {
-                where.createdBy = req.userId;
-            }
-
-            // Organizador only sees events they're assigned to
-            if (req.userRole === 'organizador') {
-                where.organizerId = req.userId;
-            }
-
             const { count, rows: events } = await Event.findAndCountAll({
                 where,
                 limit: safeLimit,
@@ -166,6 +170,11 @@ class EventController {
                     {
                         model: User,
                         as: 'organizer',
+                        attributes: ['id', 'name', 'email']
+                    },
+                    {
+                        model: User,
+                        as: 'photographer',
                         attributes: ['id', 'name', 'email']
                     }
                 ]
@@ -208,6 +217,11 @@ class EventController {
                         model: User,
                         as: 'organizer',
                         attributes: ['id', 'name', 'email']
+                    },
+                    {
+                        model: User,
+                        as: 'photographer',
+                        attributes: ['id', 'name', 'email']
                     }
                 ]
             });
@@ -219,21 +233,7 @@ class EventController {
                 });
             }
 
-            // Fotografo can only access events they created
-            if (req.userRole === 'fotografo' && event.createdBy !== req.userId) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'Acesso negado a este evento'
-                });
-            }
-
-            // Organizador can only access events they're assigned to
-            if (req.userRole === 'organizador' && event.organizerId !== req.userId) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'Acesso negado a este evento'
-                });
-            }
+            assertEventAccess(req, event);
 
             res.json({
                 success: true,
@@ -249,54 +249,26 @@ class EventController {
      */
     async create(req, res, next) {
         try {
-            const {
-                name,
-                date,
-                description,
-                location,
-                pricePerPhoto,
-                pricingPackages,
-                allPhotosPrice,
-                freePhotosCount,
-                organizerId,
-                organizerCommissionPercentage
-            } = req.body;
-            const createdBy = req.userId;
-
-            let videoPricing;
-            try {
-                videoPricing = videoPricingFields(req.body);
-            } catch (error) {
-                return res.status(400).json({ success: false, message: error.message });
-            }
-
-            if (organizerId) {
-                const organizerError = await validateOrganizer(organizerId);
-                if (organizerError) {
-                    return res.status(400).json({ success: false, message: organizerError });
-                }
-            }
-
+            const isPhotographer = req.userRole === 'fotografo';
+            const commissions = await validateEventCommissions({
+                ...req.body,
+                ...(isPhotographer && { photographerId: req.userId })
+            }, {}, { requirePercentages: true });
             const event = await Event.create({
-                name,
-                date,
-                description,
-                location,
-                createdBy,
-                ...videoPricing,
-                pricePerPhoto,
-                pricingPackages,
-                allPhotosPrice,
-                freePhotosCount: clampFreePhotosCount(freePhotosCount),
-                organizerId: organizerId || null,
-                organizerCommissionPercentage: organizerId ? organizerCommissionPercentage : null
+                ...eventChanges(req.body),
+                ...commissions,
+                createdBy: req.userId,
+                approvalStatus: isPhotographer ? 'pending' : 'approved',
+                isActive: !isPhotographer,
+                approvedBy: isPhotographer ? null : req.userId,
+                approvedAt: isPhotographer ? null : new Date()
             });
 
             logger.info(`Evento criado: ${event.id} - ${event.name}`);
 
             res.status(201).json({
                 success: true,
-                message: 'Evento criado com sucesso',
+                message: isPhotographer ? 'Evento enviado para aprovação do administrador' : 'Evento criado com sucesso',
                 data: { event }
             });
         } catch (error) {
@@ -309,78 +281,54 @@ class EventController {
      */
     async update(req, res, next) {
         try {
-            const { id } = req.params;
-            const {
-                name,
-                date,
-                description,
-                location,
-                isActive,
-                pricePerPhoto,
-                pricingPackages,
-                allPhotosPrice,
-                freePhotosCount,
-                organizerId,
-                organizerCommissionPercentage
-            } = req.body;
-
-            const event = await Event.findByPk(id);
-
-            if (!event) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Evento não encontrado'
-                });
+            if (['approvalStatus', 'approvedBy', 'approvedAt'].some(key => req.body[key] !== undefined)) {
+                fail(400, 'Utilize a ação de aprovação do evento');
             }
-
-            const updateData = {
-                name,
-                date,
-                description,
-                location,
-                isActive,
-                pricePerPhoto,
-                pricingPackages,
-                allPhotosPrice,
-                freePhotosCount: clampFreePhotosCount(freePhotosCount)
-            };
-
-            if (req.userRole === 'fotografo' && event.createdBy !== req.userId) {
-                return res.status(403).json({ success: false, message: 'Acesso negado a este evento' });
-            }
-            if (event.archivedAt) {
-                return res.status(409).json({ success: false, message: 'Evento arquivado não pode ser editado' });
-            }
-            try {
-                Object.assign(updateData, videoPricingFields(req.body, event));
-            } catch (error) {
-                return res.status(400).json({ success: false, message: error.message });
-            }
-
-            // organizerId/organizerCommissionPercentage only touched when explicitly sent,
-            // so partial updates that omit them don't accidentally clear the organizer
-            if (organizerId !== undefined) {
-                if (organizerId) {
-                    const organizerError = await validateOrganizer(organizerId);
-                    if (organizerError) {
-                        return res.status(400).json({ success: false, message: organizerError });
-                    }
+            const changesCommissions = commissionKeys.some(key => req.body[key] !== undefined);
+            if (req.userRole !== 'admin' && changesCommissions) fail(403, 'Somente o administrador pode alterar comissões');
+            const event = await sequelize.transaction(async transaction => {
+                const current = await Event.findByPk(req.params.id, { transaction, lock: transaction.LOCK.UPDATE });
+                assertEventAccess(req, current, req.userRole !== 'admin');
+                if (current.archivedAt) fail(409, 'Evento arquivado não pode ser editado');
+                if (current.approvalStatus !== 'approved' && [true, 'true'].includes(req.body.isActive)) {
+                    fail(409, 'Aprove o evento antes de ativá-lo');
                 }
-                updateData.organizerId = organizerId || null;
-                updateData.organizerCommissionPercentage = organizerId ? organizerCommissionPercentage : null;
-            } else if (organizerCommissionPercentage !== undefined) {
-                updateData.organizerCommissionPercentage = organizerCommissionPercentage;
-            }
-
-            await event.update(updateData);
-
+                const data = eventChanges(req.body, current);
+                if (changesCommissions) Object.assign(data, await validateEventCommissions(req.body, current, { transaction }));
+                return current.update(data, { transaction });
+            });
             logger.info(`Evento atualizado: ${event.id} - ${event.name}`);
-
             res.json({
                 success: true,
                 message: 'Evento atualizado com sucesso',
                 data: { event }
             });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async approve(req, res, next) {
+        try {
+            if (req.userRole !== 'admin') fail(403, 'Somente o administrador pode aprovar eventos');
+            const event = await sequelize.transaction(async transaction => {
+                const current = await Event.findByPk(req.params.id, { transaction, lock: transaction.LOCK.UPDATE });
+                if (!current) fail(404, 'Evento não encontrado');
+                if (current.archivedAt || current.approvalStatus !== 'pending') {
+                    fail(409, 'Somente eventos pendentes e não arquivados podem ser aprovados');
+                }
+                const commissions = await validateEventCommissions(req.body, current, { requirePercentages: true, transaction });
+                return current.update({
+                    ...eventChanges(req.body, current),
+                    ...commissions,
+                    approvalStatus: 'approved',
+                    isActive: true,
+                    approvedBy: req.userId,
+                    approvedAt: new Date()
+                }, { transaction });
+            });
+            logger.info(`Evento aprovado: ${event.id} por ${req.userId}`);
+            res.json({ success: true, message: 'Evento aprovado e liberado', data: { event } });
         } catch (error) {
             next(error);
         }
@@ -402,6 +350,7 @@ class EventController {
                 });
             }
 
+            assertEventAccess(req, event, req.userRole !== 'admin');
             if (event.archivedAt) {
                 return res.status(409).json({
                     success: false,
@@ -448,21 +397,7 @@ class EventController {
                 });
             }
 
-            // Fotografo can only access events they created
-            if (req.userRole === 'fotografo' && event.createdBy !== req.userId) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'Acesso negado a este evento'
-                });
-            }
-
-            // Organizador can only access events they're assigned to
-            if (req.userRole === 'organizador' && event.organizerId !== req.userId) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'Acesso negado a este evento'
-                });
-            }
+            assertEventAccess(req, event);
 
             const photos = await Photo.findAll({
                 where: { eventId: id },

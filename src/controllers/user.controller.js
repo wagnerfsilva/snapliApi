@@ -5,7 +5,32 @@ const logger = require('../utils/logger');
 const SEARCH_RESULT_LIMIT = 8;
 const CREATABLE_ROLES = ['fotografo', 'organizador'];
 
+async function searchParticipants(req, res, next, role) {
+    try {
+        const users = await User.findAll({
+            where: {
+                role,
+                isActive: true,
+                [Op.or]: [
+                    { name: { [Op.iLike]: `%${req.query.q}%` } },
+                    { email: { [Op.iLike]: `%${req.query.q}%` } }
+                ]
+            },
+            attributes: ['id', 'name', 'email'],
+            order: [['name', 'ASC']],
+            limit: SEARCH_RESULT_LIMIT
+        });
+        res.json({ success: true, data: { users } });
+    } catch (error) {
+        next(error);
+    }
+}
+
 class UserController {
+    searchPhotographers(req, res, next) {
+        return searchParticipants(req, res, next, 'fotografo');
+    }
+
     /**
      * List all users (admin-only), optional ?role= filter.
      * Used only by the "Organizadores" management screen.
@@ -38,30 +63,7 @@ class UserController {
      * Used to populate the autocomplete field on the event form (admin + fotografo).
      */
     async searchOrganizers(req, res, next) {
-        try {
-            const { q } = req.query;
-
-            const users = await User.findAll({
-                where: {
-                    role: 'organizador',
-                    isActive: true,
-                    [Op.or]: [
-                        { name: { [Op.iLike]: `%${q}%` } },
-                        { email: { [Op.iLike]: `%${q}%` } }
-                    ]
-                },
-                attributes: ['id', 'name', 'email'],
-                order: [['name', 'ASC']],
-                limit: SEARCH_RESULT_LIMIT
-            });
-
-            res.json({
-                success: true,
-                data: { users }
-            });
-        } catch (error) {
-            next(error);
-        }
+        return searchParticipants(req, res, next, 'organizador');
     }
 
     /**

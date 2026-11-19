@@ -41,7 +41,7 @@ module.exports = (sequelize, DataTypes) => {
         pixKey: {
             type: DataTypes.STRING,
             allowNull: true,
-            comment: 'Chave PIX do organizador, usada para pagamento dos resgates'
+            comment: 'Chave PIX usada para pagamento dos resgates'
         }
     }, {
         tableName: 'users',
@@ -90,12 +90,14 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'organizerId',
             as: 'organizedEvents'
         });
+        User.hasMany(models.Event, { foreignKey: 'photographerId', as: 'photographedEvents' });
 
         // User (organizador) can have multiple withdrawal requests
         User.hasMany(models.WithdrawalRequest, {
             foreignKey: 'organizerId',
             as: 'withdrawalRequests'
         });
+        User.hasMany(models.WithdrawalRequest, { foreignKey: 'photographerId', as: 'photographerWithdrawalRequests' });
 
         // User (admin) can have processed multiple withdrawal requests
         User.hasMany(models.WithdrawalRequest, {

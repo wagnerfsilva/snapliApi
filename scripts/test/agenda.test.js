@@ -43,7 +43,7 @@ beforeEach(() => {
 });
 
 test.each([
-    ['fotografo', { createdBy: 'current-user' }],
+    ['fotografo', { [Op.or]: [{ createdBy: 'current-user' }, { photographerId: 'current-user' }] }],
     ['organizador', { organizerId: 'current-user' }],
     ['admin', {}]
 ])('agenda respects %s event visibility and always isolates personal entries', async (role, ownership) => {
@@ -56,7 +56,7 @@ test.each([
         date: { [Op.between]: ['2026-11-01', '2026-11-30'] }
     });
     expect(Event.findAll.mock.calls[0][0].where).toEqual({
-        ...ownership,
+        [Op.and]: [ownership],
         date: {
             [Op.gte]: new Date('2026-11-01T00:00:00Z'),
             [Op.lt]: new Date('2026-12-01T00:00:00Z')

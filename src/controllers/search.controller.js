@@ -5,6 +5,7 @@ const s3Service = require('../services/s3.service');
 const logger = require('../utils/logger');
 const { previewUrls } = require('../services/media-preview.service');
 const { photoMatchConditions } = require('../services/face-search.service');
+const { eventScope, assertEventAccess, isEventAvailable, fail } = require('../services/event-access.service');
 
 function basenameWithoutExt(value) {
     if (!value) return null;
@@ -65,7 +66,7 @@ class SearchController {
                         model: Event,
                         as: 'event',
                         attributes: ['id', 'name', 'date', 'location', 'pricePerPhoto', 'pricingPackages', 'allPhotosPrice', 'freePhotosCount', 'freeVideosCount', 'videoEnabled', 'pricePerVideo', 'videoPricingPackages', 'allVideosPrice'],
-                        where: { isActive: true },
+                        where: { isActive: true, approvalStatus: 'approved', archivedAt: null },
                         required: true
                     }
                 ],
@@ -152,6 +153,9 @@ class SearchController {
             };
 
             const event = await Event.findByPk(eventId);
+            if (!event) fail(404, 'Evento não encontrado');
+            assertEventAccess(req, event);
+            if (!isEventAvailable(event)) fail(409, 'Evento indisponível para busca');
             where[Op.or] = [{ mediaType: 'photo' }];
             if (event?.isActive && event.videoEnabled) {
                 where[Op.or].push({ mediaType: 'video', previewKey: { [Op.ne]: null } });
@@ -207,7 +211,7 @@ class SearchController {
             // Fotografo: scope to their own events
             if (isPhotografo) {
                 const myEvents = await Event.findAll({
-                    where: { createdBy: req.userId },
+                    where: { ...eventScope(req), approvalStatus: 'approved' },
                     attributes: ['id'],
                     raw: true
                 });
@@ -322,7 +326,7 @@ class SearchController {
             // Fotografo: scope to their own events
             if (isPhotografo) {
                 const myEvents = await Event.findAll({
-                    where: { createdBy: req.userId },
+                    where: { ...eventScope(req), approvalStatus: 'approved' },
                     attributes: ['id'],
                     raw: true
                 });

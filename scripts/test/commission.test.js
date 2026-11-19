@@ -3,7 +3,7 @@
 const { spawnSync } = require('node:child_process');
 
 jest.mock('../../src/models', () => ({
-    sequelize: { query: jest.fn() },
+    sequelize: { query: jest.fn(), transaction: jest.fn() },
     Event: { findAndCountAll: jest.fn(), findByPk: jest.fn() },
     Photo: {},
     User: { findByPk: jest.fn() },
@@ -20,7 +20,7 @@ const fixture = `
     CREATE TABLE orders (id TEXT, "totalAmount" REAL, status TEXT);
     CREATE TABLE photos (id TEXT, "eventId" TEXT, "mediaType" TEXT);
     CREATE TABLE order_items (id TEXT, "orderId" TEXT, "photoId" TEXT, price REAL);
-    CREATE TABLE withdrawal_requests ("eventId" TEXT, amount REAL, status TEXT);
+    CREATE TABLE withdrawal_requests ("eventId" TEXT, amount REAL, status TEXT, "organizerId" TEXT DEFAULT 'organizer-a', "photographerId" TEXT);
     INSERT INTO orders VALUES ('mixed', 100, 'paid');
     INSERT INTO photos VALUES
         ('photo-a', 'event-a', 'photo'),
@@ -44,9 +44,11 @@ function executeSql(sql) {
 beforeEach(() => {
     jest.clearAllMocks();
     adjustment = '';
+    sequelize.transaction.mockImplementation(callback => callback({ LOCK: { UPDATE: 'UPDATE' } }));
     sequelize.query.mockImplementation(async (sql, { replacements }) => executeSql(
-        sql.replace(/:eventId/g, `'${replacements.eventId}'`)
-            .replace(/:statuses/g, "'pending', 'approved', 'paid'")
+        sql.replace(/:eventIds/g, (replacements.eventIds || []).map(id => `'${id}'`).join(','))
+            .replace(/:eventId/g, `'${replacements.eventId}'`)
+            .replace(/:statuses/g, (replacements.statuses || []).map(status => `'${status}'`).join(','))
     ));
     Event.findAndCountAll.mockResolvedValue({ count: 0, rows: [] });
 });
@@ -54,15 +56,12 @@ beforeEach(() => {
 async function listedRevenue(eventId) {
     const next = jest.fn();
     const res = { json: jest.fn(body => JSON.parse(JSON.stringify(body))) };
+    const event = { id: eventId };
+    event.setDataValue = (key, value) => { event[key] = value; };
+    Event.findAndCountAll.mockResolvedValue({ count: 1, rows: [event] });
     await eventController.getAll({ query: {}, userRole: 'admin' }, res, next);
     expect(next).not.toHaveBeenCalled();
-    const options = Event.findAndCountAll.mock.calls.at(-1)[0];
-    const [expression] = options.attributes.include.find(([, alias]) => alias === 'totalRevenue');
-    const [row] = executeSql(`
-        SELECT ${expression.val} AS "totalRevenue"
-        FROM (SELECT '${eventId}' AS id) AS "Event";
-    `);
-    return row.totalRevenue;
+    return Number(event.totalRevenue);
 }
 
 test.each([
@@ -120,7 +119,7 @@ test('returns zero when an event has no sales or all item prices are zero', asyn
 
 test('deducts only reserved or paid withdrawals from the corrected commission', async () => {
     adjustment = `
-        INSERT INTO withdrawal_requests VALUES
+        INSERT INTO withdrawal_requests ("eventId", amount, status) VALUES
             ('event-a', 1, 'pending'),
             ('event-a', 0.5, 'approved'),
             ('event-a', 0.5, 'paid'),
@@ -134,10 +133,51 @@ test('deducts only reserved or paid withdrawals from the corrected commission', 
 });
 
 test('does not expose negative available balances after existing withdrawals', async () => {
-    adjustment = "INSERT INTO withdrawal_requests VALUES ('event-a', 10, 'paid');";
+    adjustment = "INSERT INTO withdrawal_requests (\"eventId\", amount, status) VALUES ('event-a', 10, 'paid');";
     const balance = await commissionService.getOrganizerEventBalance({ id: 'event-a', organizerCommissionPercentage: 10 });
     expect(balance.commissionTotal).toBe(3);
     expect(balance.availableBalance).toBe(0);
+});
+
+test('real SQL isolates both commission reserves and open requests on the same event', async () => {
+    adjustment = `
+        INSERT INTO withdrawal_requests VALUES
+            ('event-a', 1, 'pending', 'organizer-a', NULL),
+            ('event-a', 5, 'paid', NULL, 'former-photographer'),
+            ('event-a', 20, 'rejected', NULL, 'former-photographer'),
+            ('event-b', 99, 'pending', NULL, 'photographer-b');
+    `;
+    const event = {
+        id: 'event-a', organizerId: 'organizer-a', organizerCommissionPercentage: 10,
+        photographerId: 'new-photographer', photographerCommissionPercentage: 50
+    };
+    expect(await commissionService.getOrganizerEventBalance(event)).toMatchObject({
+        totalRevenue: 30, commissionTotal: 3, reservedOrPaidTotal: 1, availableBalance: 2
+    });
+    expect(await commissionService.getEventCommissionBalance(event, 'photographer')).toMatchObject({
+        totalRevenue: 30, commissionTotal: 15, reservedOrPaidTotal: 5, availableBalance: 10
+    });
+    expect(await commissionService.hasOpenWithdrawalRequest(event.id, 'organizer')).toBe(true);
+    expect(await commissionService.hasOpenWithdrawalRequest(event.id, 'photographer')).toBe(false);
+    expect(await listedRevenue(event.id)).toBe(30);
+    const listed = Event.findAndCountAll.mock.results.at(-1);
+    const { rows } = await listed.value;
+    expect(rows[0].organizerBalance.reservedOrPaidTotal).toBe(1);
+    expect(rows[0].photographerBalance.reservedOrPaidTotal).toBe(5);
+    expect(rows[0].requestedAmount).toBe(1);
+    expect(rows[0].photographerRequestedAmount).toBe(5);
+});
+
+test('percentage changes recalculate all sales but keep previous photographer payouts deducted', async () => {
+    adjustment = "INSERT INTO withdrawal_requests VALUES ('event-a', 5, 'paid', NULL, 'photographer');";
+    const event = { id: 'event-a', photographerCommissionPercentage: 50 };
+    expect((await commissionService.getEventCommissionBalance(event, 'photographer')).availableBalance).toBe(10);
+    event.photographerCommissionPercentage = 20;
+    expect(await commissionService.getEventCommissionBalance(event, 'photographer')).toMatchObject({
+        commissionTotal: 6, reservedOrPaidTotal: 5, availableBalance: 1
+    });
+    event.photographerCommissionPercentage = 0;
+    expect((await commissionService.getEventCommissionBalance(event, 'photographer')).availableBalance).toBe(0);
 });
 
 test.each([
@@ -176,7 +216,7 @@ test.each([
     [599.37, 400]
 ])('responds with %s withdrawal using the rounded balance (HTTP %s)', async (amount, status) => {
     Event.findByPk.mockResolvedValue({
-        id: 'event-a', organizerId: 'organizer-a', organizerCommissionPercentage: 30
+        id: 'event-a', approvalStatus: 'approved', organizerId: 'organizer-a', organizerCommissionPercentage: 30
     });
     User.findByPk.mockResolvedValue({ pixKey: 'test-pix-key' });
     WithdrawalRequest.create.mockResolvedValue({ id: 'withdrawal-a', amount });
@@ -188,20 +228,20 @@ test.each([
     const next = jest.fn();
 
     await withdrawalController.create({
-        body: { eventId: 'event-a', amount }, userId: 'organizer-a'
+        body: { eventId: 'event-a', amount }, userId: 'organizer-a', userRole: 'organizador'
     }, res, next);
 
-    expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(status);
     if (status === 201) {
-        expect(WithdrawalRequest.create).toHaveBeenCalledWith(expect.objectContaining({ amount }));
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(status);
+        expect(WithdrawalRequest.create).toHaveBeenCalledWith(expect.objectContaining({ amount }), expect.objectContaining({ transaction: expect.anything() }));
         expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     } else {
         expect(WithdrawalRequest.create).not.toHaveBeenCalled();
-        expect(res.json).toHaveBeenCalledWith({
-            success: false,
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({
+            statusCode: 400,
             message: 'Valor solicitado excede o saldo disponível (R$ 599.36)'
-        });
+        }));
     }
 });
 

@@ -17,11 +17,16 @@ module.exports = (sequelize, DataTypes) => {
         },
         organizerId: {
             type: DataTypes.UUID,
-            allowNull: false,
+            allowNull: true,
             references: {
                 model: 'users',
                 key: 'id'
             }
+        },
+        photographerId: {
+            type: DataTypes.UUID,
+            allowNull: true,
+            references: { model: 'users', key: 'id' }
         },
         amount: {
             type: DataTypes.DECIMAL(10, 2),
@@ -35,12 +40,12 @@ module.exports = (sequelize, DataTypes) => {
         notes: {
             type: DataTypes.TEXT,
             allowNull: true,
-            comment: 'Observação do organizador ao solicitar o resgate'
+            comment: 'Observação do beneficiário ao solicitar o resgate'
         },
         pixKey: {
             type: DataTypes.STRING,
             allowNull: true,
-            comment: 'Cópia da chave PIX do organizador no momento da solicitação de resgate'
+            comment: 'Cópia da chave PIX do beneficiário no momento da solicitação de resgate'
         },
         adminNotes: {
             type: DataTypes.TEXT,
@@ -62,12 +67,22 @@ module.exports = (sequelize, DataTypes) => {
     }, {
         tableName: 'withdrawal_requests',
         timestamps: true,
+        validate: {
+            oneBeneficiary() {
+                if (Boolean(this.organizerId) === Boolean(this.photographerId)) {
+                    throw new Error('O resgate deve possuir exatamente um beneficiário');
+                }
+            }
+        },
         indexes: [
             {
                 fields: ['eventId']
             },
             {
                 fields: ['organizerId']
+            },
+            {
+                fields: ['photographerId']
             },
             {
                 fields: ['status']
@@ -85,6 +100,7 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'organizerId',
             as: 'organizer'
         });
+        WithdrawalRequest.belongsTo(models.User, { foreignKey: 'photographerId', as: 'photographer' });
 
         WithdrawalRequest.belongsTo(models.User, {
             foreignKey: 'processedBy',

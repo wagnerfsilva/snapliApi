@@ -87,12 +87,29 @@ npm start
 
 ### Eventos
 - `GET /api/events` - Listar eventos
-- `POST /api/events` - Criar evento (admin)
+- `POST /api/events` - Criar evento (admin ou fotógrafo)
 - `GET /api/events/:id` - Detalhes do evento
-- `PUT /api/events/:id` - Atualizar evento (admin)
-- `DELETE /api/events/:id` - Deletar evento (admin)
+- `PUT /api/events/:id` - Atualizar evento (admin ou fotógrafo com acesso, após aprovação)
+- `PATCH /api/events/:id/approve` - Revisar e aprovar evento pendente (somente admin)
+- `DELETE /api/events/:id` - Deletar evento (admin ou fotógrafo com acesso, após aprovação)
 
 `GET /api/events` oculta eventos arquivados por padrão; use `?includeArchived=true` para listá-los.
+
+#### Participantes, comissões e aprovação
+
+Cada evento aceita um organizador opcional (`organizerId`, `organizerCommissionPercentage`) e um fotógrafo opcional (`photographerId`, `photographerCommissionPercentage`). Ambos os percentuais incidem sobre a mesma receita bruta paga do evento, com até duas casas decimais, de 0 a 100, e soma máxima de 100%. Com beneficiário selecionado, informe explicitamente o percentual, inclusive zero; sem beneficiário, o percentual fica nulo.
+
+Eventos criados pelo admin são aprovados diretamente. Na criação por fotógrafo, a API impõe o vínculo ao próprio usuário, `approvalStatus=pending` e `isActive=false`, independentemente desses campos enviados no corpo. O fotógrafo pode propor as comissões, mas somente consultar o cadastro enquanto aguarda validação.
+
+A aprovação é independente de ativo/inativo e arquivamento. O admin pode editar os dados pendentes e usar `PATCH /api/events/:id/approve` com os campos finais opcionais da edição. A API valida as comissões e os participantes ativos, salva as correções, registra `approvedBy`/`approvedAt` e aprova/ativa o evento em uma única transação. Não é possível aprovar pelo `PUT` ou apenas ativar um evento pendente.
+
+Enquanto pendente, o evento não admite edição/exclusão pelo fotógrafo nem uploads, acesso operacional às mídias, buscas, checkout, cortesias ou inclusão de fotos em pedidos, inclusive por chamada direta e pelo uploader desktop. O admin pode revisar o cadastro, mas também precisa aprová-lo antes do uso operacional. Downloads de pedidos já existentes não mudam.
+
+Fotógrafos acessam eventos criados por eles ou associados ao seu `photographerId`. Somente o vínculo de beneficiário dá direito a saldo e saque. Após aprovação, apenas admin pode alterar qualquer vínculo ou percentual de comissão; fotógrafos continuam editando os demais campos permitidos. Alterações de percentual recalculam todas as vendas do evento, não apenas vendas futuras.
+
+Use `GET /api/events?approvalStatus=pending` ou `approved` para filtrar a aprovação. A listagem mantém `requestedAmount` para o organizador e acrescenta `photographerRequestedAmount`, `organizerBalance` e `photographerBalance`, com comissão e saldo calculados em centavos. A busca limitada de fotógrafos ativos para associação é `GET /api/users/search-photographers?q=...` (somente admin, mínimo de 2 caracteres).
+
+**Publicação:** aplicar a migração `20261119000001-add-photographer-and-event-approval.js` pelo comando existente `npm run migrate`, no ambiente de destino, antes de iniciar a nova API; depois publicar o painel. Coordenar a troca de todas as instâncias para que código antigo não ignore a aprovação durante a transição. A migração libera os eventos existentes sem alterar seus estados ativo/inativo/arquivado nem suas comissões, não atribui fotógrafos e mantém os saques anteriores como organizador. Não preencher aprovador/data fictícios para o legado. A reversão é recusada se houver qualquer saque de fotógrafo, evitando apagar esse histórico.
 
 ### Arquivamento de evento (script local, somente admin)
 
@@ -136,6 +153,15 @@ A confirmação revalida elegibilidade e disponibilidade em transação, bloquei
 ### Resgate de comissão
 
 A comissão total do evento é arredondada para o centavo mais próximo antes de descontar os resgates pendentes, aprovados ou pagos. Por exemplo, R$ 599,358 passa a R$ 599,36. O saldo e a validação do resgate são calculados em centavos para permitir solicitar o valor integral exibido, sem diferenças de precisão.
+
+Fotógrafo e organizador têm saldos independentes, calculados sobre a receita dos pedidos `paid`/`completed` com o rateio proporcional dos itens em pedidos de vários eventos. Cortesias e estornos não geram comissão. Cada solicitação possui exatamente um beneficiário (`organizerId` ou `photographerId`) e preserva sua chave PIX no momento da solicitação.
+
+- `GET /api/withdrawals/balance/:eventId`: participante consulta apenas sua comissão no evento; admin pode selecionar `?commissionType=organizer` (padrão) ou `photographer`.
+- `POST /api/withdrawals`: fotógrafo/organizador associado solicita `{eventId, amount, notes?}`; o perfil autenticado define a comissão, sem aceitar beneficiário arbitrário. Requer evento aprovado, chave PIX e saldo suficiente.
+- `GET /api/withdrawals`: admin vê todas as solicitações; cada participante vê somente as próprias, inclusive históricas após troca de vínculo.
+- `PATCH /api/withdrawals/:id/status`: admin aprova, rejeita ou marca como pago, mantendo as transições existentes.
+
+Uma solicitação aberta é permitida por evento e tipo de comissão: fotógrafo e organizador podem ter uma cada, simultaneamente. Checagem de saldo/reserva e criação são serializadas pelo bloqueio do evento em transação. Saques de um tipo nunca reduzem o saldo do outro. Se o admin mudar o beneficiário ou percentual, os saques anteriores não são reescritos: continuam abatendo a respectiva comissão do evento, com disponível mínimo zero. Rejeitar um saque libera sua reserva. Os pagamentos continuam manuais; não há split nem transferência PIX automática.
 
 ## 🧪 Scripts Disponíveis
 

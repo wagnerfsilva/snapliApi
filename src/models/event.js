@@ -118,6 +118,30 @@ module.exports = (sequelize, DataTypes) => {
             },
             comment: 'Percentual de comissão do organizador sobre o valor bruto vendido do evento'
         },
+        photographerId: {
+            type: DataTypes.UUID,
+            allowNull: true,
+            references: { model: 'users', key: 'id' }
+        },
+        photographerCommissionPercentage: {
+            type: DataTypes.DECIMAL(5, 2),
+            allowNull: true,
+            validate: { min: 0, max: 100 }
+        },
+        approvalStatus: {
+            type: DataTypes.ENUM('pending', 'approved'),
+            allowNull: false,
+            defaultValue: 'pending'
+        },
+        approvedBy: {
+            type: DataTypes.UUID,
+            allowNull: true,
+            references: { model: 'users', key: 'id' }
+        },
+        approvedAt: {
+            type: DataTypes.DATE,
+            allowNull: true
+        },
         archivedAt: {
             type: DataTypes.DATE,
             allowNull: true,
@@ -127,12 +151,26 @@ module.exports = (sequelize, DataTypes) => {
     }, {
         tableName: 'events',
         timestamps: true,
+        validate: {
+            commissionLimit() {
+                if (Math.round(Number(this.organizerCommissionPercentage || 0) * 100)
+                    + Math.round(Number(this.photographerCommissionPercentage || 0) * 100) > 10000) {
+                    throw new Error('A soma das comissões não pode ultrapassar 100%');
+                }
+            }
+        },
         indexes: [
             {
                 fields: ['date']
             },
             {
                 fields: ['isActive']
+            },
+            {
+                fields: ['photographerId']
+            },
+            {
+                fields: ['approvalStatus']
             }
         ]
     });
@@ -149,6 +187,8 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'organizerId',
             as: 'organizer'
         });
+        Event.belongsTo(models.User, { foreignKey: 'photographerId', as: 'photographer' });
+        Event.belongsTo(models.User, { foreignKey: 'approvedBy', as: 'approver' });
 
         // Event has many Photos
         Event.hasMany(models.Photo, {

@@ -1,5 +1,6 @@
-const { WithdrawalRequest, Event, User } = require('../models');
+const { WithdrawalRequest, Event, User, sequelize } = require('../models');
 const commissionService = require('../services/commission.service');
+const { fail } = require('../services/event-access.service');
 const logger = require('../utils/logger');
 
 const TRANSITIONS = {
@@ -7,101 +8,66 @@ const TRANSITIONS = {
     approved: ['paid', 'rejected']
 };
 
+function commissionType(req) {
+    if (req.userRole === 'admin') return req.query.commissionType || 'organizer';
+    if (req.userRole === 'fotografo') return 'photographer';
+    if (req.userRole === 'organizador') return 'organizer';
+    fail(403, 'Acesso negado');
+}
+
 class WithdrawalController {
-    /**
-     * Balance/summary for an event's organizer commission.
-     * Admin can view any event; organizador only their own.
-     */
     async getBalance(req, res, next) {
         try {
-            const { eventId } = req.params;
-
-            const event = await Event.findByPk(eventId);
-            if (!event) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Evento não encontrado'
-                });
-            }
-
-            if (req.userRole === 'organizador' && event.organizerId !== req.userId) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'Acesso negado a este evento'
-                });
-            }
-
-            const balance = await commissionService.getOrganizerEventBalance(event);
-            const hasOpenRequest = await commissionService.hasOpenWithdrawalRequest(eventId);
-
-            res.json({
-                success: true,
-                data: { balance, hasOpenRequest }
-            });
+            const type = commissionType(req);
+            const fields = commissionService.commissionFields(type);
+            const event = await Event.findByPk(req.params.eventId);
+            if (!event) fail(404, 'Evento não encontrado');
+            if (req.userRole !== 'admin' && event[fields.id] !== req.userId) fail(403, 'Acesso negado a este saldo');
+            if (event.approvalStatus !== 'approved') fail(409, 'Evento aguardando aprovação do administrador');
+            const [balance, hasOpenRequest] = await Promise.all([
+                commissionService.getEventCommissionBalance(event, type),
+                commissionService.hasOpenWithdrawalRequest(event.id, type)
+            ]);
+            res.json({ success: true, data: { balance, hasOpenRequest, commissionType: type } });
         } catch (error) {
             next(error);
         }
     }
 
-    /**
-     * Organizador creates a withdrawal request for an event they're assigned to.
-     */
     async create(req, res, next) {
         try {
+            if (!['fotografo', 'organizador'].includes(req.userRole)) fail(403, 'Somente o beneficiário pode solicitar seu resgate');
+            const type = commissionType(req);
+            const fields = commissionService.commissionFields(type);
             const { eventId, amount, notes } = req.body;
-
-            const event = await Event.findByPk(eventId);
-            if (!event) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Evento não encontrado'
-                });
+            if (!/^\d+(\.\d{1,2})?$/.test(String(amount)) || Number(amount) <= 0 || Number(amount) > 99999999.99) {
+                fail(400, 'Informe um valor positivo com até duas casas decimais');
             }
-
-            if (event.organizerId !== req.userId) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'Você não é o organizador deste evento'
-                });
-            }
-
-            const organizer = await User.findByPk(req.userId);
-            if (!organizer?.pixKey) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Cadastre sua chave PIX antes de solicitar um resgate'
-                });
-            }
-
-            const hasOpenRequest = await commissionService.hasOpenWithdrawalRequest(eventId);
-            if (hasOpenRequest) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Já existe uma solicitação de resgate em aberto para este evento'
-                });
-            }
-
-            const balance = await commissionService.getOrganizerEventBalance(event);
-            const requestedAmount = parseFloat(amount);
-
-            if (Math.round(requestedAmount * 100) > Math.round(balance.availableBalance * 100)) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Valor solicitado excede o saldo disponível (R$ ${balance.availableBalance.toFixed(2)})`
-                });
-            }
-
-            const withdrawalRequest = await WithdrawalRequest.create({
-                eventId,
-                organizerId: req.userId,
-                amount: requestedAmount,
-                notes,
-                pixKey: organizer.pixKey,
-                status: 'pending'
+            const withdrawalRequest = await sequelize.transaction(async transaction => {
+                const event = await Event.findByPk(eventId, { transaction, lock: transaction.LOCK.UPDATE });
+                if (!event) fail(404, 'Evento não encontrado');
+                if (event[fields.id] !== req.userId) fail(403, 'Você não é o beneficiário desta comissão');
+                if (event.approvalStatus !== 'approved') fail(409, 'Evento aguardando aprovação do administrador');
+                const beneficiary = await User.findByPk(req.userId, { transaction });
+                if (!beneficiary?.pixKey) fail(400, 'Cadastre sua chave PIX antes de solicitar um resgate');
+                if (await commissionService.hasOpenWithdrawalRequest(eventId, type, { transaction })) {
+                    fail(400, 'Já existe uma solicitação de resgate em aberto para esta comissão');
+                }
+                const balance = await commissionService.getEventCommissionBalance(event, type, { transaction });
+                if (Math.round(Number(amount) * 100) > Math.round(balance.availableBalance * 100)) {
+                    fail(400, `Valor solicitado excede o saldo disponível (R$ ${balance.availableBalance.toFixed(2)})`);
+                }
+                return WithdrawalRequest.create({
+                    eventId,
+                    organizerId: type === 'organizer' ? req.userId : null,
+                    photographerId: type === 'photographer' ? req.userId : null,
+                    amount: Number(amount),
+                    notes,
+                    pixKey: beneficiary.pixKey,
+                    status: 'pending'
+                }, { transaction });
             });
-
-            logger.info(`Solicitação de resgate criada: ${withdrawalRequest.id} - evento ${eventId} - organizador ${req.userId}`);
-
+            logger.info(`Solicitação de resgate criada: ${withdrawalRequest.id} - evento ${eventId} - ${type} ${req.userId}`);
             res.status(201).json({
                 success: true,
                 message: 'Solicitação de resgate criada com sucesso',
@@ -112,82 +78,46 @@ class WithdrawalController {
         }
     }
 
-    /**
-     * List withdrawal requests. Admin sees all (optional ?status= filter),
-     * organizador sees only their own.
-     */
     async getAll(req, res, next) {
         try {
-            const { status } = req.query;
-
             const where = {};
-            if (status) where.status = status;
-            if (req.userRole === 'organizador') where.organizerId = req.userId;
-
+            if (req.query.status) where.status = req.query.status;
+            if (req.userRole !== 'admin') {
+                const fields = commissionService.commissionFields(commissionType(req));
+                where[fields.id] = req.userId;
+            }
             const withdrawalRequests = await WithdrawalRequest.findAll({
                 where,
                 include: [
-                    {
-                        model: Event,
-                        as: 'event',
-                        attributes: ['id', 'name', 'date']
-                    },
-                    {
-                        model: User,
-                        as: 'organizer',
-                        attributes: ['id', 'name', 'email', 'pixKey']
-                    }
+                    { model: Event, as: 'event', attributes: ['id', 'name', 'date'] },
+                    { model: User, as: 'organizer', attributes: ['id', 'name', 'email', 'pixKey'] },
+                    { model: User, as: 'photographer', attributes: ['id', 'name', 'email', 'pixKey'] }
                 ],
                 order: [['createdAt', 'DESC']]
             });
-
-            res.json({
-                success: true,
-                data: { withdrawalRequests }
-            });
+            res.json({ success: true, data: { withdrawalRequests } });
         } catch (error) {
             next(error);
         }
     }
 
-    /**
-     * Admin approves/rejects/marks a withdrawal request as paid.
-     */
     async updateStatus(req, res, next) {
         try {
             const { id } = req.params;
             const { status, adminNotes } = req.body;
-
-            const withdrawalRequest = await WithdrawalRequest.findByPk(id);
-            if (!withdrawalRequest) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Solicitação de resgate não encontrada'
-                });
-            }
-
-            const allowedNextStatuses = TRANSITIONS[withdrawalRequest.status] || [];
-            if (!allowedNextStatuses.includes(status)) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Transição de status inválida: ${withdrawalRequest.status} → ${status}`
-                });
-            }
-
-            await withdrawalRequest.update({
-                status,
-                adminNotes,
-                processedBy: req.userId,
-                processedAt: new Date()
+            const reference = await WithdrawalRequest.findByPk(id, { attributes: ['eventId'] });
+            if (!reference) fail(404, 'Solicitação de resgate não encontrada');
+            const withdrawalRequest = await sequelize.transaction(async transaction => {
+                await Event.findByPk(reference.eventId, { transaction, lock: transaction.LOCK.UPDATE });
+                const current = await WithdrawalRequest.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+                if (!current) fail(404, 'Solicitação de resgate não encontrada');
+                if (!(TRANSITIONS[current.status] || []).includes(status)) {
+                    fail(400, `Transição de status inválida: ${current.status} → ${status}`);
+                }
+                return current.update({ status, adminNotes, processedBy: req.userId, processedAt: new Date() }, { transaction });
             });
-
             logger.info(`Solicitação de resgate ${id} atualizada para status=${status} por ${req.userId}`);
-
-            res.json({
-                success: true,
-                message: 'Solicitação de resgate atualizada com sucesso',
-                data: { withdrawalRequest }
-            });
+            res.json({ success: true, message: 'Solicitação de resgate atualizada com sucesso', data: { withdrawalRequest } });
         } catch (error) {
             next(error);
         }

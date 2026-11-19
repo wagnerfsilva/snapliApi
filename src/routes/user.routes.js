@@ -56,6 +56,7 @@ router.use(authenticate);
 
 // Search organizadores — admin and fotografo (used by the event form autocomplete)
 router.get('/search-organizers', authorize('admin', 'fotografo'), searchOrganizersValidation, validate, userController.searchOrganizers);
+router.get('/search-photographers', authorize('admin'), searchOrganizersValidation, validate, userController.searchPhotographers);
 
 // User management — admin only
 router.use(authorize('admin'));

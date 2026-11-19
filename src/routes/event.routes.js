@@ -1,9 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { body } = require('express-validator');
+const { body, query, param } = require('express-validator');
 const eventController = require('../controllers/event.controller');
 const { authenticate, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
+const photographerValidation = [
+    body('photographerId').optional({ nullable: true }).isUUID().withMessage('photographerId inválido'),
+    body('photographerCommissionPercentage').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('Comissão deve ser entre 0 e 100')
+];
 
 // Validation rules
 const createEventValidation = [
@@ -72,13 +76,18 @@ const updateEventValidation = [
 router.use(authenticate);
 
 // Read routes — admin, fotografo and organizador (own events, filtered in controller)
-router.get('/', authorize('admin', 'fotografo', 'organizador'), eventController.getAll);
+router.get('/', authorize('admin', 'fotografo', 'organizador'), [
+    query('approvalStatus').optional().isIn(['pending', 'approved']).withMessage('Status de aprovação inválido')
+], validate, eventController.getAll);
 router.get('/:id', authorize('admin', 'fotografo', 'organizador'), eventController.getById);
 router.get('/:id/statistics', authorize('admin', 'fotografo', 'organizador'), eventController.getStatistics);
 
 // Write routes — admin and fotografo only (organizador never creates/edits events)
-router.post('/', authorize('admin', 'fotografo'), createEventValidation, validate, eventController.create);
-router.put('/:id', authorize('admin', 'fotografo'), updateEventValidation, validate, eventController.update);
+router.post('/', authorize('admin', 'fotografo'), createEventValidation, photographerValidation, validate, eventController.create);
+router.put('/:id', authorize('admin', 'fotografo'), updateEventValidation, photographerValidation, validate, eventController.update);
+router.patch('/:id/approve', authorize('admin'), [
+    param('id').isUUID().withMessage('Evento inválido')
+], updateEventValidation, photographerValidation, validate, eventController.approve);
 router.delete('/:id', authorize('admin', 'fotografo'), eventController.delete);
 
 module.exports = router;

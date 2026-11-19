@@ -7,6 +7,7 @@ const imageService = require('../services/image.service');
 const rekognitionService = require('../services/rekognition.service');
 const logger = require('../utils/logger');
 const { previewUrls } = require('../services/media-preview.service');
+const { assertEventAccess } = require('../services/event-access.service');
 
 class PhotoController {
     /**
@@ -33,6 +34,7 @@ class PhotoController {
                 });
             }
 
+            assertEventAccess(req, event, true);
             if (event.archivedAt) {
                 return res.status(409).json({
                     success: false,
@@ -131,8 +133,9 @@ class PhotoController {
             }
 
             // Media was removed from S3 when the event was archived
-            const archivedEvent = await Event.findOne({ where: { id: eventId, archivedAt: { [Op.ne]: null } }, attributes: ['id'] });
-            if (archivedEvent) {
+            const event = await Event.findByPk(eventId);
+            assertEventAccess(req, event, true);
+            if (event.archivedAt) {
                 return res.json({
                     success: true,
                     data: {
@@ -189,7 +192,7 @@ class PhotoController {
                     {
                         model: Event,
                         as: 'event',
-                        attributes: ['id', 'name', 'date']
+                        attributes: ['id', 'name', 'date', 'createdBy', 'photographerId', 'organizerId', 'approvalStatus']
                     }
                 ]
             });
@@ -201,6 +204,7 @@ class PhotoController {
                 });
             }
 
+            assertEventAccess(req, photo.event, true);
             const photoData = {
                 ...photo.toJSON(),
                 ...(await previewUrls(photo, { includeVideoPreview: true }))
@@ -231,12 +235,10 @@ class PhotoController {
                 });
             }
 
+            const event = await Event.findByPk(photo.eventId);
+            assertEventAccess(req, event, true);
             // Check if photo has been sold
             if (photo.mediaType === 'video') {
-                const event = await Event.findByPk(photo.eventId);
-                if (!event || (req.userRole !== 'admin' && event.createdBy !== req.userId)) {
-                    return res.status(403).json({ success: false, message: 'Acesso negado ao evento' });
-                }
                 if (['processing', 'pending'].includes(photo.processingStatus)) {
                     return res.status(409).json({ success: false, message: 'Aguarde o processamento ou cancele o upload aberto' });
                 }
@@ -319,6 +321,7 @@ class PhotoController {
                 });
             }
 
+            assertEventAccess(req, await Event.findByPk(photo.eventId), true);
             // Generate pre-signed URL (valid for 1 hour)
             const downloadUrl = await s3Service.generatePresignedUrl(
                 photo.originalKey,
@@ -364,13 +367,7 @@ class PhotoController {
                 });
             }
 
-            // Verify user is the event owner (admins bypass this check)
-            if (req.userRole !== 'admin' && event.createdBy !== req.userId) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'Acesso negado. Você não é o administrador deste evento.'
-                });
-            }
+            assertEventAccess(req, event, true);
 
             if (event.archivedAt) {
                 return res.json({
@@ -455,11 +452,8 @@ class PhotoController {
                 });
             }
 
+            assertEventAccess(req, await Event.findByPk(photo.eventId), true);
             if (photo.mediaType === 'video') {
-                const event = await Event.findByPk(photo.eventId);
-                if (!event || (req.userRole !== 'admin' && event.createdBy !== req.userId)) {
-                    return res.status(403).json({ success: false, message: 'Acesso negado ao evento' });
-                }
                 if (photo.processingStatus !== 'failed' || photo.uploadStatus !== 'completed') {
                     return res.status(409).json({ success: false, message: 'Somente videos enviados com falha podem ser reprocessados' });
                 }
